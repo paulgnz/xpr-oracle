@@ -67,9 +67,17 @@ All flags also accept env-var equivalents (`XPR_ORACLE_NONINTERACTIVE=1`, `XPR_O
 
 ### Hand-off prompt for an agent
 
-If you want your local AI agent (Claude Code, Cursor, etc.) to perform the install, paste this:
+If you want your local AI agent (Claude Code, Cursor, etc.) to perform the install, paste this whole block (GitHub's copy-button on the top-right of the code block makes this one click):
 
-> Clone https://github.com/paulgnz/xpr-oracle to my home directory. Read `AGENTS.md` for project context. Then run `./install.sh --non-interactive --account=<MY-BP> --pairs=xprusd --interval=300 --install-systemd` and verify the systemd unit is active. If `oracle` permission isn't set up on-chain yet, follow `docs/PERMISSIONS.md` to do `updateauth` + `linkauth` first. Run `npm test` and `npm run dry-run` before going live. After enabling the unit, confirm a successful push appears in `journalctl -u xpr-oracle` and on https://explorer.xprnetwork.org/account/delphioracle.
+```text
+Clone https://github.com/paulgnz/xpr-oracle to my home directory. Read AGENTS.md for project context. Then run:
+
+  ./install.sh --non-interactive --account=<MY-BP> --pairs=xprusd --interval=300 --install-systemd
+
+Verify the systemd unit is active. If the `oracle` permission isn't set up on-chain yet, follow docs/PERMISSIONS.md to do `updateauth` + `linkauth` first (use the explorer UI flow if my active key is in Anchor/Bloks/WebAuth, the cleos flow if it's in keosd). Run `npm test` and `npm run dry-run` before going live. After enabling the unit, confirm a successful push appears in `journalctl -u xpr-oracle` and on https://explorer.xprnetwork.org/account/delphioracle.
+
+Replace <MY-BP> with my BP account name. Don't push to mainnet during dry-run. If anything fails, surface the error and ask before retrying.
+```
 
 ## Config
 
