@@ -1,6 +1,6 @@
 {
   "name": "xpr-oracle",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Minimal price-pusher daemon for XPR Network Block Producers. Fetches CEX prices, aggregates them, and submits to the on-chain delphioracle contract via cleos + keosd.",
   "type": "module",
   "main": "dist/index.js",

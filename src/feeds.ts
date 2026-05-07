@@ -10,6 +10,7 @@ import {
   isOpen,
   recordSuccess,
   recordFailure,
+  isTransientError,
   CircuitOpenError,
   type BreakerState,
 } from "./breaker.js";
@@ -235,6 +236,13 @@ export async function fetchFeed(feedId: string): Promise<number> {
     _breakers.set(feedId, recordSuccess(state));
     return price;
   } catch (e) {
+    // Don't count transient errors (rate-limits, gateway hiccups, network
+    // blips) toward the breaker — the upstream is fine, just temporarily
+    // unavailable. Counting them risks tripping the breaker during a
+    // CoinGecko 429 storm or a brief DNS issue.
+    if (isTransientError(e)) {
+      throw e;
+    }
     const r = recordFailure(state);
     _breakers.set(feedId, r.state);
     if (r.justOpened) {

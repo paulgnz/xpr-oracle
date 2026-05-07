@@ -1,6 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { newState, isOpen, recordSuccess, recordFailure } from "./breaker.js";
+import {
+  newState,
+  isOpen,
+  recordSuccess,
+  recordFailure,
+  isTransientError,
+} from "./breaker.js";
 
 describe("breaker", () => {
   test("new state is closed", () => {
@@ -84,5 +90,52 @@ describe("breaker", () => {
     assert.equal(r.justOpened, false);
     assert.equal(isOpen(s, 3_600_001), true);
     assert.equal(s.openSince, 3_600_001);
+  });
+});
+
+describe("isTransientError", () => {
+  test("HTTP 429 (rate limit) is transient", () => {
+    assert.equal(
+      isTransientError(new Error("https://api.coingecko.com/... -> HTTP 429")),
+      true,
+    );
+  });
+  test("HTTP 408 (request timeout) is transient", () => {
+    assert.equal(isTransientError(new Error("HTTP 408")), true);
+  });
+  test("HTTP 502/503/504 are transient", () => {
+    assert.equal(isTransientError(new Error("HTTP 502 Bad Gateway")), true);
+    assert.equal(isTransientError(new Error("HTTP 503 Service Unavailable")), true);
+    assert.equal(isTransientError(new Error("HTTP 504")), true);
+  });
+  test("ECONNRESET / ETIMEDOUT are transient", () => {
+    assert.equal(isTransientError(new Error("connect ECONNRESET")), true);
+    assert.equal(isTransientError(new Error("ETIMEDOUT")), true);
+  });
+  test("abort signal / fetch failed are transient", () => {
+    assert.equal(isTransientError(new Error("The operation was aborted")), true);
+    assert.equal(isTransientError(new Error("fetch failed")), true);
+  });
+  test("HTTP 400 (bad request) is permanent — wrong symbol", () => {
+    assert.equal(
+      isTransientError(new Error("https://api.bitget.com/... -> HTTP 400")),
+      false,
+    );
+  });
+  test("HTTP 404 (not found) is permanent — endpoint gone", () => {
+    assert.equal(
+      isTransientError(new Error("https://api.exchange.coinbase.com/... -> HTTP 404")),
+      false,
+    );
+  });
+  test("HTTP 401 / 403 (auth) are permanent", () => {
+    assert.equal(isTransientError(new Error("HTTP 401 Unauthorized")), false);
+    assert.equal(isTransientError(new Error("HTTP 403 Forbidden")), false);
+  });
+  test("malformed price (parse failure) is permanent", () => {
+    assert.equal(
+      isTransientError(new Error("kucoin:XPR-USDT: bad price undefined")),
+      false,
+    );
   });
 });

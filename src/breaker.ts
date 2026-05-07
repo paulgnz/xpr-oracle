@@ -54,3 +54,24 @@ export function recordFailure(
   }
   return { state: { failures }, justOpened: false };
 }
+
+/**
+ * Is this error a transient blip (rate-limit, network hiccup, gateway error)
+ * rather than a structural failure (wrong symbol, removed endpoint, auth)?
+ *
+ * The circuit breaker should NOT count transient errors — the upstream is
+ * fine, just temporarily unavailable. Counting them risks tripping a feed
+ * during a CoinGecko 429 storm or a brief DNS issue.
+ *
+ * Permanent (count toward breaker): HTTP 400, 401, 403, 404, malformed JSON.
+ * Transient (don't count): HTTP 408, 429, 5xx, ECONNRESET, ETIMEDOUT, abort.
+ */
+export function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /HTTP 4(08|29)\b/.test(msg) ||
+    /HTTP 5\d\d\b/.test(msg) ||
+    /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|EHOSTUNREACH/.test(msg) ||
+    /aborted|timed? ?out|fetch failed/i.test(msg)
+  );
+}

@@ -38,6 +38,12 @@ Environment=HOME=PLACEHOLDER_HOME
 ExecStart=PLACEHOLDER_NODE_BIN dist/index.js
 Restart=on-failure
 RestartSec=10
+# The daemon's SIGTERM handler waits for the current tick to finish before
+# exiting. Worst case: 5 pairs × 5 feeds × 5s timeout + a 30s cleos push +
+# margin → can legitimately exceed systemd's default 90s before stop completes.
+# Bumping to 180s lets the daemon clean up gracefully instead of getting
+# SIGKILL'd mid-push (which is harmless but noisy in journalctl).
+TimeoutStopSec=180
 StandardOutput=journal
 StandardError=journal
 # SyslogIdentifier makes `journalctl -t xpr-oracle` work as a fallback on
