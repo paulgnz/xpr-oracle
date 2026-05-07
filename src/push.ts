@@ -166,8 +166,15 @@ function runCleos(args: string[], stdin: string | null, timeoutMs: number): Prom
   });
 }
 
+/** Common cleos arg prefix: --url <endpoint> [--wallet-url <walletUrl>]. */
+function cleosBase(cfg: Config): string[] {
+  const base = ["--url", cfg.endpoint];
+  if (cfg.walletUrl) base.push("--wallet-url", cfg.walletUrl);
+  return base;
+}
+
 async function unlockWallet(cfg: Config, password: string): Promise<void> {
-  const args = ["--url", cfg.endpoint, "wallet", "unlock"];
+  const args = [...cleosBase(cfg), "wallet", "unlock"];
   if (cfg.walletName) args.push("--name", cfg.walletName);
   // Password on stdin — never argv.
   const r = await runCleos(args, password + "\n", DEFAULT_UNLOCK_TIMEOUT_MS);
@@ -191,7 +198,7 @@ export async function pushQuotes(cfg: Config, quotes: Quote[]): Promise<string> 
   const data = JSON.stringify({ owner: cfg.account, quotes });
   const auth = `${cfg.account}@${cfg.permission}`;
   const args = [
-    "--url", cfg.endpoint,
+    ...cleosBase(cfg),
     "push", "action",
     cfg.contract, "write",
     data,

@@ -34,6 +34,15 @@ export interface Config {
   /** Optional keosd wallet name. Omit to use the default wallet. */
   walletName?: string;
   /**
+   * Optional keosd socket URL passed to `cleos --wallet-url …`. Use this if
+   * your keosd runs on a different host or socket than `$HOME/eosio-wallet/keosd.sock`
+   * for the daemon's user. Examples:
+   *   "unix:///run/keosd/keosd.sock"
+   *   "http://127.0.0.1:8900"
+   * If unset, cleos uses its default ($HOME/eosio-wallet/keosd.sock).
+   */
+  walletUrl?: string;
+  /**
    * Optional path to a chmod-600 file containing the keosd wallet password.
    * If set, the daemon runs `cleos wallet unlock` before each push.
    * Alternative: set the `XPR_ORACLE_WALLET_PW` env var.

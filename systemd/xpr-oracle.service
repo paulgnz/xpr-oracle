@@ -12,6 +12,18 @@ User=xpr-oracle
 Group=xpr-oracle
 WorkingDirectory=/opt/xpr-oracle
 Environment=XPR_ORACLE_CONFIG=/etc/xpr-oracle/config.json
+# PATH for the cleos subprocess. The daemon shells out to `cleos` and inherits
+# only what's in this unit's environment — there's no shell to read /etc/profile
+# or ~/.bashrc. Common cleos install locations are below; if your BP's cleos
+# lives somewhere else (e.g. /opt/eosio-2.0/bin), append it here.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/eosio/bin
+# cleos looks for keosd's socket at $HOME/eosio-wallet/keosd.sock by default.
+# Since this unit runs as the xpr-oracle service user, that resolves to
+# /var/lib/xpr-oracle/eosio-wallet/keosd.sock — make sure your keosd is using
+# the same path, OR symlink the right one in, OR run keosd as the same user.
+# If keosd runs elsewhere, the cleanest fix is the daemon's WALLET_URL hook —
+# see docs/BP-ONBOARDING.md.
+Environment=HOME=/var/lib/xpr-oracle
 # Adjust node path if you use a version manager (nvm, fnm, etc.)
 ExecStart=/usr/bin/node /opt/xpr-oracle/dist/index.js
 Restart=on-failure
