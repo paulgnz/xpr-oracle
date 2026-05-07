@@ -13,7 +13,7 @@
     "dev": "tsx src/index.ts",
     "dry-run": "tsx src/index.ts --dry-run",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test 'src/**/*.test.ts'"
+    "test": "node --import tsx --test src/aggregate.test.ts src/backoff.test.ts"
   },
   "engines": {
     "node": ">=20"
