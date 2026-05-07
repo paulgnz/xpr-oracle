@@ -110,14 +110,17 @@ Replace <MY-BP> with my BP account name. Don't push to mainnet during dry-run. I
 
 ## Pairs currently registered on `delphioracle`
 
-| Pair | Status | Notes |
+| Pair | Precision | Notes |
 |---|---|---|
-| `xprusd` | ✅ active, precision 6 | The only registered pair as of 2026-05-07. |
-| `btcusd`, `ethusd`, `usdcusd`, `xmdusd` | ⏳ requested for Atomic Drops | Need pair registration via `newbounty` — see [docs/GOVERNANCE.md](docs/GOVERNANCE.md). |
+| `xprusd` | 6 | XPR/USD (active since the contract was deployed in Feb 2025) |
+| `btcusd` | 4 | BTC/USD reference price |
+| `ethusd` | 4 | ETH/USD reference price |
+| `usdcusd` | 6 | USDC/USD (≈1; tracks the peg) |
+| `xprbtc` | 8 | XPR/BTC cross-rate (currently sourced from CoinGecko `vs_currencies=btc`; synthetic from xprusd/btcusd is cleaner once daemon support lands) |
 
-**Naming convention.** Pair names follow Metallicus's existing `oracles` convention: price the **underlying asset**, not the XPR-side wrapper. So `btcusd` (the price of BTC), not `xbtcusd` (the price of XBTC-the-wrapper). Same data is fed from CEX BTC markets either way, but `btcusd` is the standard name the rest of the ecosystem uses.
+**Naming convention.** Pair names price the **underlying asset**, not the XPR-side wrapper — `btcusd` (the price of BTC), not `xbtcusd` (the price of XBTC-the-wrapper). Same data is fed from CEX BTC markets either way, but the underlying name is what Metallicus's `oracles` contract and the rest of the ecosystem use.
 
-The exception is `xmdusd`: XMD is XPR-native via `xmd.token`, has no off-chain reference market, and behaves like `xprusd` — keep the X prefix. See [docs/FEEDS.md](docs/FEEDS.md) for the per-pair feed table.
+XPR-native assets (XPR via `eosio.token`, XMD via `xmd.token`) keep the `x` prefix because they have no off-chain reference market. See [docs/FEEDS.md](docs/FEEDS.md) for the per-pair feed table.
 
 ## Sibling: Metallicus `oracles` contract
 

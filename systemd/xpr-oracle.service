@@ -6,6 +6,10 @@ Documentation=https://github.com/paulgnz/xpr-oracle
 # system service — so we don't require it as a systemd unit.
 After=network-online.target nodeos.service
 Wants=network-online.target
+# Don't fork-bomb on a permanently bad config. NOTE: these belong in [Unit],
+# not [Service] — systemd silently ignores them in [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
