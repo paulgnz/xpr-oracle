@@ -4,7 +4,7 @@ A minimal, copy-pasteable price-pusher for **XPR Network Block Producers**. Fetc
 
 ## Why this matters now
 
-On 2026-05-07, **AtomicHub** asked active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly. Until today, only `saltant` was pushing, hourly — meaning the on-chain median was effectively single-sourced.
+On 2026-05-07, [**Rob ([@robrigo](https://github.com/robrigo))**](https://github.com/robrigo) from **AtomicHub** asked active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly. Until today, only `saltant` was pushing, hourly — meaning the on-chain median was effectively single-sourced.
 
 This repo is the daemon that fixes that.
 
