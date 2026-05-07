@@ -166,14 +166,15 @@ Watch the first few cycles. You should see `push ok: <txid>` lines. Look the txi
 
 ## 7. Production install (systemd)
 
-> **Before `systemctl enable --now`, confirm the `linkauth` row is on-chain.** If `delphioracle::write` isn't linked to your `oracle` permission, the daemon will start cleanly and then fail every push with `missing authority`. Verify:
+> **Before `systemctl enable --now`, confirm the `linkauth` is on-chain.** If `delphioracle::write` isn't linked to your `oracle` permission, the daemon will start cleanly and then fail every push with `missing authority`. Verify with `get_account`:
 >
 > ```bash
-> curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
->   -d '{"code":"eosio","scope":"<ACCOUNT>","table":"permlink","limit":50,"json":true}'
+> curl -s https://proton.eosusa.io/v1/chain/get_account \
+>   -d '{"account_name":"<ACCOUNT>"}' \
+>   | jq '.permissions[] | select(.perm_name=="oracle") | .linked_actions'
 > ```
 >
-> Look for a row with `code: delphioracle`, `message_type: write`, `required_permission: oracle`. No row → see [PERMISSIONS.md](PERMISSIONS.md) §3.
+> Expected: `[ { "account": "delphioracle", "action": "write" } ]`. Empty array or no `delphioracle/write` entry → see [PERMISSIONS.md](PERMISSIONS.md) §3.
 
 ```bash
 # system user, no shell

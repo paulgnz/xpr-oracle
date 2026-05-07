@@ -65,14 +65,31 @@ If your `active` permission lives in a wallet that signs through an explorer, pr
 
 ### Verify the link is on-chain
 
-`proton account` and most explorers don't surface `linkauth` rows obviously. The reliable check is a direct query of the `eosio::permlink` table, scoped to your account:
+Linkauth records are a native chain object, **not** a contract table — `get_table_rows code=eosio table=permlink` returns empty regardless. Use one of these instead.
+
+**Option 1: chain RPC `get_account`** — official, works on any node. Look at `permissions[].linked_actions[]` on the `oracle` permission:
 
 ```bash
-curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
-  -d '{"code":"eosio","scope":"mybp","table":"permlink","limit":50,"json":true}'
+curl -s https://proton.eosusa.io/v1/chain/get_account \
+  -d '{"account_name":"mybp"}' \
+  | jq '.permissions[] | select(.perm_name=="oracle") | .linked_actions'
 ```
 
-You should see a row mapping `code: delphioracle`, `message_type: write`, `required_permission: oracle`. If that row doesn't exist, the link wasn't applied — fix it before going further or every push will fail.
+Expected output:
+
+```json
+[ { "account": "delphioracle", "action": "write" } ]
+```
+
+**Option 2: Hyperion `/v2/state/get_links`** — same data plus the block/timestamp when the link was created:
+
+```bash
+curl -s "https://proton.eosusa.io/v2/state/get_links?account=mybp" | jq '.links'
+```
+
+**Option 3: explorer UI** — https://explorer.xprnetwork.org/account/mybp shows the permission tree with each linked action labeled. Useful as a screenshot for your whitelist request.
+
+If `linked_actions` is empty (or `links` doesn't include `delphioracle::write`), the link wasn't applied — fix it before going further or every push will fail.
 
 ### Adding more linked actions later
 
