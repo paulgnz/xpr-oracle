@@ -26,12 +26,12 @@ If your BP node doesn't have spare capacity or you want strict isolation, a $5/m
 
 These work for **testing** but have real downsides for an oracle:
 
-- **Key handling.** You'll have to put the oracle private key in their environment variables. With the systemd setup the key sits in the proton CLI keystore, encrypted at rest. Env vars on a PaaS are decrypted in process memory and visible to platform staff/tooling.
+- **Key handling.** The daemon relies on a local keosd wallet for signing. Running keosd on a PaaS adds another moving part you have to keep alive across restarts; the encrypted wallet file ends up wherever the platform's persistent volume is, which may be readable to platform staff/tooling. With the systemd setup keosd lives next to your existing BP automation.
 - **Cold starts and sleeps.** Free/cheap tiers may sleep idle services. Oracle pushes need to be reliably on-cadence.
 - **Egress IP rotation** can trigger CEX API rate limits.
 - **No journald** — you lose the structured log pipeline you already have for BP ops.
 
-If you must use Railway for a quick test, fork the daemon to read keys from env and sign with `@proton/js` directly (rather than shelling out to the CLI). That's a meaningful divergence from this repo's design — keep it on a branch, not main.
+If you must use Railway for a quick test, run keosd as a sidecar process and unlock it at boot. Or fork the daemon to read a keyfile and sign with `@proton/js` (or eosjs) directly. That's a meaningful divergence from this repo's design — keep it on a branch, not main.
 
 ## Sizing
 

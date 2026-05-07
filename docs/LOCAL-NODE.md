@@ -1,6 +1,6 @@
 # Pointing the daemon at your local nodeos
 
-If you run a BP or API node on XPR Network, you almost certainly already have a `nodeos` instance serving HTTP RPC — you should push through it instead of the public foundation endpoint.
+If you run a BP or API node on XPR Network, you almost certainly already have a `nodeos` instance serving HTTP RPC — push through it instead of the public foundation endpoint.
 
 ## Why
 
@@ -12,22 +12,21 @@ If you run a BP or API node on XPR Network, you almost certainly already have a 
 | TaPoS freshness | Whatever they're at | What you're at |
 | Trust | You're trusting their infra to relay your signed tx | You're trusting your own |
 
-This is also the integration point with the canonical [`xpr.start`](https://github.com/XPRNetwork/xpr.start) BP/API node stack — if you're running that, you have everything you need.
+This is the integration point with the canonical [`xpr.start`](https://github.com/XPRNetwork/xpr.start) BP/API node stack — if you're running that, you have everything you need.
 
-## One-time setup
+## How the daemon picks its endpoint
 
-The proton CLI's "chain" abstraction is just a `(name → chainId + endpoint)` map. Add an entry pointing at your local node:
+The daemon shells out to `cleos --url <endpoint> push action …`. The endpoint comes from `config.endpoint`, full stop — no third-party discovery service, no fallback chain, no library magic. Whatever URL you put in config is the URL `cleos` hits.
 
-```bash
-proton chain:add proton-local \
-  384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0 \
-  http://127.0.0.1:8888
+Set it in `config.json`:
 
-proton chain:set proton-local
-proton chain:get   # confirm it's selected
+```json
+{ "endpoint": "http://127.0.0.1:8888" }
 ```
 
-Replace `127.0.0.1:8888` with whatever your node serves on. From this point every `proton action …` call (which is what the daemon shells out to) hits your nodeos.
+Or any URL your node serves on. The daemon will only ever contact that URL.
+
+> **Why not `@proton/cli`?** `@proton/cli@0.1.98` ignores the positional URL argument to `endpoint:set` and forces an interactive picker against a hardcoded list of foundation/community endpoints (verified by reading `lib/commands/endpoint/set.js`). It cannot be pointed at an arbitrary local node. `cleos` accepts `--url` cleanly and ships with nodeos, so it's the better fit anyway.
 
 ## nodeos requirements
 
@@ -72,32 +71,22 @@ Every transaction includes a TaPoS (transaction-as-proof-of-stake) reference to 
    ```
 2. **Have a fallback chain entry.** Keep `proton chain:add proton` (the public endpoint) configured even if you don't use it day-to-day. If your local node falls behind, switch the daemon's chain target with one command and let the public endpoint carry the load while you investigate.
 
-## Keystore password (or rather, the lack of one)
+## Wallet password handling
 
-The proton CLI keystore can be created without a password. For a daemon that signs every minute, this is the standard pattern — the encryption layer was designed for interactive workflows where a human types a password to unlock. For non-interactive signing, you instead:
-
-- **Skip the password** at `proton key:add` (press enter when prompted).
-- **Lean on filesystem permissions**: `chmod 700 ~/.proton`, run the daemon under a dedicated unprivileged user, use full-disk encryption on the host.
-
-That's how the rest of the EOSIO/Antelope ecosystem handles validator and oracle daemon keys. The threat model is "an attacker who already has read access to the daemon user's home directory has compromised everything regardless" — the keystore password wouldn't have saved you.
-
-If you need a stronger guarantee than filesystem permissions, the right answer is hardware: an HSM or a remote signer process, not a password on a file. That's a future feature, not the current default.
+Signing is done by `keosd` against a wallet you've imported the oracle key into. The daemon optionally runs `cleos wallet unlock` before each push, which means the password needs to be readable from the daemon process. See [PERMISSIONS.md](PERMISSIONS.md) §5 for the three options (chmod-600 file, env var, externally-managed unlock).
 
 ## Verifying the end-to-end path
 
-Before you go live, run one harmless action through the daemon's full path to confirm signing + local nodeos + propagation all work:
+Before you go live, run one harmless action through the daemon's full path to confirm cleos + keosd + local nodeos + propagation all work:
 
 ```bash
-# self-transfer 0.0001 XPR — replace mybp@oracle if you've set up a different perm
-proton transfer mybp mybp '0.0001 XPR' 'oracle setup test' -p mybp@active
+# self-transfer 0.0001 XPR — replace mybp@active if you want to test under
+# the oracle permission specifically (which only works after the linkauth)
+cleos --url http://127.0.0.1:8888 transfer mybp mybp '0.0001 XPR' 'oracle setup test' -p mybp@active
 ```
 
 Then look up the txid on https://explorer.xprnetwork.org. If it shows up there, your local node successfully relayed and the network accepted it. If not, the explorer's "transaction not found" tells you propagation failed — usually a TaPoS / lagging-node issue.
 
-## Switching back to the public endpoint
+## Switching to a different endpoint
 
-```bash
-proton chain:set proton          # the default public-endpoint entry
-```
-
-Useful for ad-hoc queries when your local node is being upgraded.
+Edit `endpoint` in `config.json` and restart the daemon. Useful for fail-over to a public endpoint while your local node is upgrading.

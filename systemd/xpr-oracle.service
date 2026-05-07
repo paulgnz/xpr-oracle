@@ -1,8 +1,10 @@
 [Unit]
 Description=XPR Network oracle price pusher
 Documentation=https://github.com/paulgnz/xpr-oracle
-After=network-online.target
+# keosd must be up so cleos can sign. nodeos is the push target.
+After=network-online.target keosd.service nodeos.service
 Wants=network-online.target
+Requires=keosd.service
 
 [Service]
 Type=simple

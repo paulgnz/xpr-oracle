@@ -8,7 +8,7 @@ A minimal, copy-pasteable price-pusher for **XPR Network Block Producers**. Fetc
 
 A frequent question: *"Can every BP run an oracle on XPR Network?"* Yes — but **BPs do not deploy their own oracle contract**. XPR Network already has the `delphioracle` aggregator (a port of [eostitan/delphioracle](https://github.com/eostitan/delphioracle)). What BPs run is an **off-chain pusher**: a small daemon that fetches CEX prices and submits them to that one shared on-chain contract via the `write` action.
 
-This repo is that daemon.
+This repo is that daemon. It uses the same `cleos` + `keosd` pattern most BPs already have wired up for `claimrewards` — no new key-management story to invent.
 
 ## What it does
 
@@ -25,16 +25,16 @@ Zero runtime npm dependencies. ~300 lines of TypeScript. Designed to live alongs
 ```
                     ┌──────────────┐
    Binance ────────▶│              │
-   KuCoin  ────────▶│  xpr-oracle  │── proton action ──▶ delphioracle::write
-   Bitget  ────────▶│  (this repo) │                          │
-   Coinbase────────▶│              │                          ▼
-                    └──────────────┘                    on-chain median
-                                                       (read by dApps)
+   KuCoin  ────────▶│  xpr-oracle  │── cleos push action ──▶ your local nodeos ──▶ delphioracle::write
+   Bitget  ────────▶│  (this repo) │   (signed via keosd)                                   │
+   Coinbase────────▶│              │                                                        ▼
+                    └──────────────┘                                                  on-chain median
+                                                                                     (read by dApps)
 ```
 
 ## Quickstart
 
-Prereqs: Node 20+, `@proton/cli`, an XPR account whitelisted on `delphioracle` (see [docs/BP-ONBOARDING.md](docs/BP-ONBOARDING.md)).
+Prereqs: Node 20+, `cleos` and `keosd` (already on every BP node), an XPR account whitelisted on `delphioracle` (see [docs/BP-ONBOARDING.md](docs/BP-ONBOARDING.md)).
 
 ```bash
 # 1. install
@@ -42,28 +42,25 @@ git clone https://github.com/paulgnz/xpr-oracle && cd xpr-oracle
 npm install
 npm run build
 
-# 2. configure
+# 2. configure — set "account", "permission", and "endpoint" to your local nodeos
 cp config.example.json config.json
-$EDITOR config.json   # set "account" and "permission" to your BP's signer
+$EDITOR config.json
 
-# 3. point the proton CLI at your local nodeos (recommended for BPs)
-#    see docs/LOCAL-NODE.md for the full story
-proton chain:add proton-local \
-  384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0 \
-  http://127.0.0.1:8888
-proton chain:set proton-local
-# or fall back to the public endpoint:
-# proton chain:set proton
+# 3. import the oracle private key into your keosd wallet (one time)
+cleos --url http://127.0.0.1:8888 wallet import   # paste the oracle-permission private key
 
-# 4. import the signing key (no password needed for non-interactive signing)
-proton key:add        # paste the oracle-permission private key
+# 4. drop the wallet password into a chmod-600 file
+sudo install -m 0600 -o $(whoami) -g $(whoami) /dev/null /etc/xpr-oracle/wallet.pw
+echo 'PW5K…your wallet password…' | sudo tee /etc/xpr-oracle/wallet.pw
 
-# 5. dry run (no on-chain writes)
+# 5. dry run (no on-chain writes — also exercises the feed fetchers)
 npm run dry-run
 
 # 6. real run
 npm start
 ```
+
+The daemon mirrors the `claimrewards` cron pattern most BPs already use: `cleos wallet unlock` then `cleos push action`. No new key-management story.
 
 When you're happy, install as a systemd unit — see [docs/BP-ONBOARDING.md](docs/BP-ONBOARDING.md).
 
@@ -76,7 +73,11 @@ When you're happy, install as a systemd unit — see [docs/BP-ONBOARDING.md](doc
 | `account` | Your BP account (or a sub-account dedicated to oracle work). |
 | `permission` | A dedicated permission like `oracle`, **never `active` or `owner`**. See [docs/PERMISSIONS.md](docs/PERMISSIONS.md). |
 | `contract` | `delphioracle` |
+| `endpoint` | URL passed to `cleos --url …`. Recommended: `http://127.0.0.1:8888` (your local nodeos). |
 | `intervalSeconds` | 30–120 typical. Don't go below 5. |
+| `expirationSeconds` | Tx expiration in seconds (default 240, matches the typical claimrewards cron). |
+| `walletPasswordFile` | Path to a chmod-600 file with the keosd wallet password. Or set `XPR_ORACLE_WALLET_PW`. Or omit and keep keosd unlocked some other way. |
+| `walletName` | Optional keosd wallet name; omit to use the default. |
 | `pairs[].name` | On-chain pair name, e.g. `xprusd`. |
 | `pairs[].feeds` | `"<exchange>:<symbol>"` list. Built-in CEX adapters: `binance`, `kucoin`, `bitget`, `coinbase`, `kraken`, `bitfinex`, `okx`, `bybit`, `mexc`, `gate`. Aggregator: `coingecko` (use sparingly — see [docs/FEEDS.md](docs/FEEDS.md)). |
 | `pairs[].quotedPrecision` | Must match the on-chain pair's `quoted_precision`. |

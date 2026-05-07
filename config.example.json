@@ -2,11 +2,10 @@
   "account": "yourbp",
   "permission": "oracle",
   "contract": "delphioracle",
+  "endpoint": "http://127.0.0.1:8888",
   "intervalSeconds": 60,
-  "endpoints": [
-    "https://proton.eosusa.io",
-    "https://proton.greymass.com"
-  ],
+  "expirationSeconds": 240,
+  "walletPasswordFile": "/etc/xpr-oracle/wallet.pw",
   "pairs": [
     {
       "name": "xprusd",

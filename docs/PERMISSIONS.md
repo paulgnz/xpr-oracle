@@ -152,47 +152,71 @@ If you later want to push to additional contracts (e.g. the native `oracles` acc
 proton account:permission:link mybp <other-contract> <action> oracle -p mybp@active
 ```
 
-## 4. Import the private key into the host's keystore
+## 4. Import the private key into your keosd wallet
+
+The daemon shells out to `cleos push action … -p mybp@oracle`. `cleos` resolves the signature via your local `keosd` wallet, exactly like your existing `claimrewards` cron. The daemon never sees the key directly.
 
 ```bash
-proton key:add
-# paste ORACLE_PRIVATE_KEY
+# create a wallet for oracle use (or reuse an existing one)
+cleos --url http://127.0.0.1:8888 wallet create -n oracle --to-console
+
+# import the oracle-permission private key
+cleos --url http://127.0.0.1:8888 wallet import -n oracle
+# paste ORACLE_PRIVATE_KEY when prompted
 ```
 
-The pusher shells out to `proton action … mybp@oracle`, and the CLI looks up the matching key in its keystore. The daemon never sees the key directly.
+If you already have a wallet with all your BP keys, you can skip the `wallet create` step and `wallet import` straight into it. Set `walletName` in `config.json` if you use a non-default wallet name.
 
-## 5. Tighten file permissions on the keystore
+## 5. Make the wallet password available to the daemon
 
-The proton CLI stores keys under your home directory. Lock it down:
+`cleos wallet unlock` needs the wallet password. Two clean paths:
+
+**Path A — chmod-600 file (recommended):**
 
 ```bash
-chmod 700 ~/.proton
+sudo mkdir -p /etc/xpr-oracle
+sudo install -m 0600 /dev/null /etc/xpr-oracle/wallet.pw
+echo 'PW5K…your wallet password…' | sudo tee /etc/xpr-oracle/wallet.pw
+sudo chown xpr-oracle:xpr-oracle /etc/xpr-oracle/wallet.pw
 ```
 
-If you're running under a dedicated `xpr-oracle` system user (recommended for systemd), make sure that user owns the keystore.
+Then in `config.json`:
+
+```json
+{ "walletPasswordFile": "/etc/xpr-oracle/wallet.pw" }
+```
+
+**Path B — environment variable:**
+
+In `xpr-oracle.service` add `Environment=XPR_ORACLE_WALLET_PW=PW5K…`. Slightly worse because env vars are visible in `/proc/<pid>/environ` and `systemctl show`, but it's how a lot of BP automation works.
+
+**Path C — keep the wallet unlocked externally:**
+
+Run `keosd --unlock-timeout 9999999` (or via systemd) and unlock it once at boot with a separate mechanism. Leave both `walletPasswordFile` and the env var unset; the daemon will skip the unlock step. Useful if you want all wallet handling outside the oracle daemon.
 
 ## What this protects against
 
 | If this is compromised | … the attacker can: |
 |---|---|
 | `mybp@oracle` key | Push bad prices for the linked pairs. They cannot move funds, change votes, replace contracts, or change permissions. |
-| The pusher daemon | At worst, push prices the same way an attacker with the key could. The daemon never holds the key. |
-| The host's filesystem | They can read the encrypted keystore — recover the key if the password is weak. Use a strong proton CLI password and disk encryption. |
+| The pusher daemon | At worst, push prices the same way an attacker with the wallet password could. The daemon never holds the key. |
+| The host's filesystem | They can read the keosd wallet file and the password file — recover the key if filesystem permissions are loose. Use a dedicated unprivileged user, chmod 600 on secrets, and full-disk encryption. |
 
 ## Recovery
 
 If the oracle key leaks:
 
 ```bash
-# generate a fresh keypair
-proton key:generate
+# generate a fresh keypair (any tool that produces an EOSIO/Antelope keypair works)
+cleos create key --to-console
 
 # replace the key on the existing permission (does NOT remove the link)
-proton account:permission mybp oracle NEW_PUBLIC_KEY active -p mybp@active
+cleos --url http://127.0.0.1:8888 set account permission mybp oracle \
+  NEW_PUBLIC_KEY active -p mybp@active
 
-# update the host's keystore
-proton key:remove OLD_PUBLIC_KEY
-proton key:add   # paste NEW_PRIVATE_KEY
+# rotate the keosd wallet
+cleos --url http://127.0.0.1:8888 wallet remove_key OLD_PUBLIC_KEY -n oracle --password $WALLET_PW
+cleos --url http://127.0.0.1:8888 wallet import -n oracle   # paste NEW_PRIVATE_KEY
 ```
 
 The `delphioracle::write` link survives because it's tied to the permission name, not the key.

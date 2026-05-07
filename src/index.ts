@@ -24,6 +24,9 @@ function loadConfig(): Config {
   if (!cfg.account || !cfg.permission || !cfg.contract) {
     throw new Error("config missing account/permission/contract");
   }
+  if (!cfg.endpoint || !/^https?:\/\//.test(cfg.endpoint)) {
+    throw new Error("config.endpoint must be a http(s) URL (e.g. http://127.0.0.1:8888)");
+  }
   if (!Array.isArray(cfg.pairs) || cfg.pairs.length === 0) {
     throw new Error("config.pairs must be non-empty");
   }
@@ -103,8 +106,8 @@ async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const cfg = loadConfig();
   log.info(
-    `xpr-oracle starting: account=${cfg.account}@${cfg.permission} ` +
-      `contract=${cfg.contract} pairs=[${cfg.pairs.map((p) => p.name).join(",")}] ` +
+    `xpr-oracle starting: ${cfg.account}@${cfg.permission} -> ${cfg.contract} ` +
+      `via ${cfg.endpoint} | pairs=[${cfg.pairs.map((p) => p.name).join(",")}] ` +
       `interval=${cfg.intervalSeconds}s${dryRun ? " (dry-run)" : ""}`,
   );
 

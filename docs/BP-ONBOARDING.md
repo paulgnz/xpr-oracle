@@ -2,7 +2,7 @@
 
 End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network.
 
-> All commands assume `@proton/cli` installed (`npm i -g @proton/cli`) and a chain entry selected. **Recommended for BPs:** point the CLI at your local nodeos rather than the public endpoint — see [LOCAL-NODE.md](LOCAL-NODE.md). The public endpoint (`proton chain:set proton`) is fine for testing.
+> All commands assume `cleos` and `keosd` are available on the host (they ship with nodeos and are already running for any BP using the standard [`xpr.start`](https://github.com/XPRNetwork/xpr.start) stack). The daemon talks to whatever URL you set as `endpoint` in `config.json` — recommended is your local nodeos. See [LOCAL-NODE.md](LOCAL-NODE.md). `@proton/cli` is optional and useful for human ops (account queries, multisig) but is **not** in the daemon's hot path.
 
 ---
 
@@ -31,10 +31,10 @@ Generate the key **on the host that will run the pusher**. Never email/Slack/pas
 
 ```bash
 # generate locally
-proton key:generate
+cleos create key --to-console
 
-# import to the proton CLI keystore on this host
-proton key:add
+# import into your keosd wallet (use --name oracle if you want a dedicated wallet)
+cleos --url http://127.0.0.1:8888 wallet import
 # paste the private key when prompted
 ```
 
@@ -187,8 +187,12 @@ sudo cp config.json /etc/xpr-oracle/config.json
 sudo chown -R xpr-oracle:xpr-oracle /opt/xpr-oracle /etc/xpr-oracle /var/lib/xpr-oracle
 sudo chmod 600 /etc/xpr-oracle/config.json
 
-# proton CLI keystore for the service user
-sudo -u xpr-oracle -H bash -c 'proton chain:set proton && proton key:add'
+# wallet password file (chmod 600, owned by the service user)
+sudo install -m 0600 -o xpr-oracle -g xpr-oracle /dev/null /etc/xpr-oracle/wallet.pw
+echo 'PW5K…your wallet password…' | sudo tee /etc/xpr-oracle/wallet.pw
+
+# import the oracle key into the keosd wallet on this host (one time)
+cleos --url http://127.0.0.1:8888 wallet import   # paste the oracle private key
 
 # install the unit
 sudo cp systemd/xpr-oracle.service /etc/systemd/system/

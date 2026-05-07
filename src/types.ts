@@ -16,16 +16,31 @@ export interface PairConfig {
 }
 
 export interface Config {
-  /** XPR account that signs the write. Recommended: a dedicated permission's parent account. */
+  /** XPR account that signs the write. */
   account: string;
   /** Permission to sign with. Recommended: a dedicated "oracle" permission, NOT active. */
   permission: string;
   /** Almost always "delphioracle". */
   contract: string;
+  /**
+   * URL passed to `cleos --url …` and ultimately reached by it.
+   * Recommended: your local nodeos (e.g. "http://127.0.0.1:8888").
+   */
+  endpoint: string;
   /** Push cadence. Tune per your CPU/NET budget; 30–120s is typical. */
   intervalSeconds: number;
-  /** Diagnostic-only — pusher uses the proton CLI's configured endpoint. */
-  endpoints: string[];
+  /** Transaction expiration in seconds passed to cleos. Default 240. */
+  expirationSeconds?: number;
+  /** Optional keosd wallet name. Omit to use the default wallet. */
+  walletName?: string;
+  /**
+   * Optional path to a chmod-600 file containing the keosd wallet password.
+   * If set, the daemon runs `cleos wallet unlock` before each push.
+   * Alternative: set the `XPR_ORACLE_WALLET_PW` env var.
+   * Or: leave both unset and keep keosd unlocked some other way (long
+   * --unlock-timeout, separate cron, etc.).
+   */
+  walletPasswordFile?: string;
   pairs: PairConfig[];
 }
 
