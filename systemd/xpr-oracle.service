@@ -28,17 +28,23 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/o
 # right keosd without symlinking. If your keosd is on a different socket,
 # set "walletUrl" in config.json instead.
 Environment=HOME=PLACEHOLDER_HOME
-# Adjust node path if you use a version manager (nvm, fnm, etc.)
-ExecStart=/usr/bin/node /opt/xpr-oracle/dist/index.js
+# install.sh detects node via 'command -v node' and substitutes the absolute
+# path here. nvm/fnm users may need to point this at their version-manager's
+# node binary.
+ExecStart=PLACEHOLDER_NODE_BIN dist/index.js
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
-# Hardening
+# Hardening — note ProtectHome=read-only (not =true): the daemon runs as the
+# same user that runs claimrewards, and it needs to talk to that user's keosd
+# socket which lives in $HOME/eosio-wallet/. ProtectHome=true would render the
+# whole /home tree empty for this unit; read-only keeps it visible. The keosd
+# socket dir is added to ReadWritePaths below so cleos can write to the socket.
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=true
+ProtectHome=read-only
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectKernelLogs=true
@@ -66,9 +72,10 @@ DevicePolicy=closed
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
-# Leave the service user's home writable for keosd-related cache files (cleos
-# stores ~/eosio-wallet/ here when reading the keosd wallet directory).
-ReadWritePaths=/var/lib/xpr-oracle
+# Allow writes to the keosd wallet directory so cleos can talk to keosd's
+# Unix socket (the connection requires write access on the socket file).
+# install.sh substitutes this with $HOME/eosio-wallet for the chosen user.
+ReadWritePaths=PLACEHOLDER_KEOSD_DIR
 
 [Install]
 WantedBy=multi-user.target

@@ -583,17 +583,38 @@ install_systemd() {
   fi
   [[ -n "$INSTALL_SYSTEMD" ]] || { info "skipping systemd install"; return; }
 
+  # Pre-authenticate sudo so the daemon-reload + cp don't prompt mid-flow.
+  # Honors SUDO_ASKPASS if set; otherwise plain `sudo -v` reads from the TTY.
+  if ! sudo -v; then
+    fail "sudo authentication failed. Either run 'sudo -v' first to pre-cache,
+or set SUDO_ASKPASS=/path/to/askpass and re-run.
+
+For non-interactive installs (CI / agents):
+  echo \"\$SUDO_PASS\" | sudo -S -v
+  ./install.sh --install-systemd ..."
+  fi
+
   # Resolve the run-user's home directory (where keosd's wallet socket lives).
-  local run_home run_group config_path
+  local run_home run_group config_path node_bin keosd_dir
   if ! run_home=$(getent passwd "$RUN_USER" 2>/dev/null | cut -d: -f6); then
     fail "user '$RUN_USER' not found in /etc/passwd. Pass --user=<existing-user> or create the user first."
   fi
   run_group=$(id -gn "$RUN_USER")
   config_path="$SCRIPT_DIR/config.json"
+  keosd_dir="${run_home}/eosio-wallet"
+
+  # Detect node binary — must be an absolute path for systemd ExecStart.
+  if ! node_bin=$(command -v node); then
+    fail "node not found in PATH; cannot template ExecStart"
+  fi
+  if [[ "$node_bin" != /* ]]; then
+    node_bin=$(readlink -f "$node_bin")  # resolve relative paths
+  fi
 
   info "Installing systemd unit (sudo) — runs as $RUN_USER:$run_group"
 
-  # Substitute the placeholders in the unit template and write to /etc/systemd/system.
+  # Substitute placeholders in the unit template and write to /etc/systemd/system.
+  # Use a delimiter that won't appear in any path (|).
   local tmp_unit
   tmp_unit=$(mktemp)
   sed -e "s|PLACEHOLDER_USER|$RUN_USER|g" \
@@ -601,18 +622,22 @@ install_systemd() {
       -e "s|PLACEHOLDER_WORKING_DIR|$SCRIPT_DIR|g" \
       -e "s|PLACEHOLDER_CONFIG_PATH|$config_path|g" \
       -e "s|PLACEHOLDER_HOME|$run_home|g" \
+      -e "s|PLACEHOLDER_NODE_BIN|$node_bin|g" \
+      -e "s|PLACEHOLDER_KEOSD_DIR|$keosd_dir|g" \
       "$SCRIPT_DIR/systemd/xpr-oracle.service" > "$tmp_unit"
 
   sudo cp "$tmp_unit" /etc/systemd/system/xpr-oracle.service
   sudo chmod 644 /etc/systemd/system/xpr-oracle.service
   rm -f "$tmp_unit"
 
-  # Tighten config.json perms so keosd password isn't world-readable.
+  # Tighten config.json perms so any keosd password isn't world-readable.
   chmod 600 "$config_path" 2>/dev/null || true
 
   sudo systemctl daemon-reload
   ok "systemd unit installed at /etc/systemd/system/xpr-oracle.service"
   ok "  User=$RUN_USER  WorkingDirectory=$SCRIPT_DIR  HOME=$run_home"
+  ok "  ExecStart=$node_bin dist/index.js"
+  ok "  Wallet RW path=$keosd_dir"
   ok "  Config=$config_path"
   info "Start with:  sudo systemctl enable --now xpr-oracle"
   info "Logs:        sudo journalctl -u xpr-oracle -f"
