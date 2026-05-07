@@ -46,14 +46,22 @@ npm run build
 cp config.example.json config.json
 $EDITOR config.json   # set "account" and "permission" to your BP's signer
 
-# 3. import the signing key into the proton CLI keystore
-proton chain:set proton
+# 3. point the proton CLI at your local nodeos (recommended for BPs)
+#    see docs/LOCAL-NODE.md for the full story
+proton chain:add proton-local \
+  384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0 \
+  http://127.0.0.1:8888
+proton chain:set proton-local
+# or fall back to the public endpoint:
+# proton chain:set proton
+
+# 4. import the signing key (no password needed for non-interactive signing)
 proton key:add        # paste the oracle-permission private key
 
-# 4. dry run (no on-chain writes)
+# 5. dry run (no on-chain writes)
 npm run dry-run
 
-# 5. real run
+# 6. real run
 npm start
 ```
 
@@ -70,7 +78,7 @@ When you're happy, install as a systemd unit — see [docs/BP-ONBOARDING.md](doc
 | `contract` | `delphioracle` |
 | `intervalSeconds` | 30–120 typical. Don't go below 5. |
 | `pairs[].name` | On-chain pair name, e.g. `xprusd`. |
-| `pairs[].feeds` | `"<exchange>:<symbol>"` list. Built-in: `binance`, `kucoin`, `bitget`, `coinbase`, `kraken`. |
+| `pairs[].feeds` | `"<exchange>:<symbol>"` list. Built-in CEX adapters: `binance`, `kucoin`, `bitget`, `coinbase`, `kraken`, `bitfinex`, `okx`, `bybit`, `mexc`, `gate`. Aggregator: `coingecko` (use sparingly — see [docs/FEEDS.md](docs/FEEDS.md)). |
 | `pairs[].quotedPrecision` | Must match the on-chain pair's `quoted_precision`. |
 | `pairs[].maxDeviationPct` | Reject feed samples this far from the initial median. |
 | `pairs[].minSources` | Skip pair if fewer feeds survive. |
@@ -86,8 +94,10 @@ The pair must exist on-chain first. See [docs/GOVERNANCE.md](docs/GOVERNANCE.md)
 ## Documentation
 
 - **[docs/BP-ONBOARDING.md](docs/BP-ONBOARDING.md)** — full BP setup: account, permission, whitelist request, hosting, systemd install.
-- **[docs/PERMISSIONS.md](docs/PERMISSIONS.md)** — least-privilege oracle permission with linked auth.
+- **[docs/PERMISSIONS.md](docs/PERMISSIONS.md)** — least-privilege oracle permission with linked auth (with worked example).
+- **[docs/LOCAL-NODE.md](docs/LOCAL-NODE.md)** — pointing the daemon at your own nodeos (xpr.start integration).
 - **[docs/HOSTING.md](docs/HOSTING.md)** — running on your BP node vs Railway vs a VPS.
+- **[docs/FEEDS.md](docs/FEEDS.md)** — feed taxonomy, adding exchanges, picking a healthy mix.
 - **[docs/GOVERNANCE.md](docs/GOVERNANCE.md)** — proposing pairs and whitelisting oracles via BP multisig.
 
 ## Disclaimer

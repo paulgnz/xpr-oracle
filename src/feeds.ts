@@ -26,6 +26,11 @@ function num(x: unknown, ctx: string): number {
   return n;
 }
 
+/**
+ * Direct CEX adapters. Each samples its own order book independently — these
+ * are the strongest contributions to the median.
+ */
+
 const adapters: Record<string, FeedAdapter> = {
   binance: async (symbol) => {
     const j = await fetchJson<{ price: string }>(
@@ -61,6 +66,68 @@ const adapters: Record<string, FeedAdapter> = {
     );
     const key = j.result ? Object.keys(j.result)[0] : undefined;
     return num(key ? j.result?.[key]?.c?.[0] : undefined, `kraken:${symbol}`);
+  },
+
+  // Bitfinex — symbol prefixed with "t", e.g. "tBTCUSD". Response is a flat
+  // array; index 6 is LAST_PRICE per the v2 ticker spec.
+  bitfinex: async (symbol) => {
+    const j = await fetchJson<unknown[]>(
+      `https://api-pub.bitfinex.com/v2/ticker/${symbol}`,
+    );
+    return num(j?.[6], `bitfinex:${symbol}`);
+  },
+
+  // OKX — symbol uses dash separator, e.g. "BTC-USDT".
+  okx: async (symbol) => {
+    const j = await fetchJson<{ code: string; data?: Array<{ last: string }> }>(
+      `https://www.okx.com/api/v5/market/ticker?instId=${symbol}`,
+    );
+    if (j.code !== "0") throw new Error(`okx:${symbol}: code=${j.code}`);
+    return num(j?.data?.[0]?.last, `okx:${symbol}`);
+  },
+
+  // Bybit — spot category, symbol e.g. "BTCUSDT".
+  bybit: async (symbol) => {
+    const j = await fetchJson<{
+      retCode: number;
+      result?: { list?: Array<{ lastPrice: string }> };
+    }>(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`);
+    if (j.retCode !== 0) throw new Error(`bybit:${symbol}: retCode=${j.retCode}`);
+    return num(j?.result?.list?.[0]?.lastPrice, `bybit:${symbol}`);
+  },
+
+  // MEXC — symbol e.g. "BTCUSDT". Same shape as Binance.
+  mexc: async (symbol) => {
+    const j = await fetchJson<{ price: string }>(
+      `https://api.mexc.com/api/v3/ticker/price?symbol=${symbol}`,
+    );
+    return num(j?.price, `mexc:${symbol}`);
+  },
+
+  // Gate.io — symbol uses underscore, e.g. "BTC_USDT".
+  gate: async (symbol) => {
+    const j = await fetchJson<Array<{ last: string }>>(
+      `https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${symbol}`,
+    );
+    return num(j?.[0]?.last, `gate:${symbol}`);
+  },
+
+  /**
+   * CoinGecko — aggregator. Symbol is the CoinGecko `id` slug
+   * (e.g. "proton", "bitcoin", "ethereum"), priced against USD.
+   *
+   * NOTE on correlation: CoinGecko's price is itself a volume-weighted median
+   * of many of the CEXes you're already polling directly (KuCoin, Bitget, etc.
+   * for XPR). Including it next to those direct sources partly double-counts
+   * them and weakens the outlier-rejection guarantee. Use it as a fallback
+   * sanity-check, not as a peer in the median. Free tier is rate-limited to
+   * ~30 req/min — fine for a 60s tick, tight for a 30s tick.
+   */
+  coingecko: async (id) => {
+    const j = await fetchJson<Record<string, { usd: number }>>(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
+    );
+    return num(j?.[id]?.usd, `coingecko:${id}`);
   },
 };
 

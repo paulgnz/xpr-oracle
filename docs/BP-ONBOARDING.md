@@ -2,7 +2,7 @@
 
 End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network.
 
-> All commands assume `@proton/cli` installed (`npm i -g @proton/cli`) and `proton chain:set proton` already run.
+> All commands assume `@proton/cli` installed (`npm i -g @proton/cli`) and a chain entry selected. **Recommended for BPs:** point the CLI at your local nodeos rather than the public endpoint — see [LOCAL-NODE.md](LOCAL-NODE.md). The public endpoint (`proton chain:set proton`) is fine for testing.
 
 ---
 

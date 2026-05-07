@@ -10,7 +10,13 @@
   "pairs": [
     {
       "name": "xprusd",
-      "feeds": ["kucoin:XPR-USDT", "bitget:XPRUSDT", "binance:XPRUSDT"],
+      "feeds": [
+        "kucoin:XPR-USDT",
+        "bitget:XPRUSDT",
+        "mexc:XPRUSDT",
+        "gate:XPR_USDT",
+        "coingecko:proton"
+      ],
       "quotedPrecision": 6,
       "maxDeviationPct": 2.5,
       "minSources": 2
