@@ -91,6 +91,59 @@ curl -s "https://proton.eosusa.io/v2/state/get_links?account=mybp" | jq '.links'
 
 If `linked_actions` is empty (or `links` doesn't include `delphioracle::write`), the link wasn't applied — fix it before going further or every push will fail.
 
+## Worked example: `protonnz`
+
+Real two-transaction setup as it appeared on mainnet, captured directly from the chain. Use this as a copy-paste reference for what each step looks like on-chain — particularly useful if you're signing through Anchor / Bloks / WebAuth instead of the proton CLI.
+
+### Step 1 — `eosio::updateauth` (create the permission)
+
+- **Block:** 380882480 · **Time:** 2026-05-07 04:28:40 UTC
+- **TX:** [`6a670b81845d8020a1694e580ad75c59129d1fc5fa66ac1f8f1ed86ce38ee7ff`](https://explorer.xprnetwork.org/transaction/6a670b81845d8020a1694e580ad75c59129d1fc5fa66ac1f8f1ed86ce38ee7ff)
+- **Authorization:** `protonnz@active`
+
+```json
+{
+  "account": "protonnz",
+  "permission": "oracle",
+  "parent": "active",
+  "auth": {
+    "threshold": 1,
+    "keys": [
+      { "key": "PUB_K1_5ddxydauki57FFon5eFkAgZke5KcMGg8eFYsnfZnGnuV9Jd2Y1", "weight": 1 }
+    ]
+  }
+}
+```
+
+### Step 2 — `eosio::linkauth` (lock the permission to one action)
+
+- **Block:** 380882571 · **Time:** 2026-05-07 04:29:25 UTC (45s after step 1)
+- **TX:** [`0d6da571d461903aff58d65e0abdd66c12fc461d6c604fc6db4c6044322a4fa5`](https://explorer.xprnetwork.org/transaction/0d6da571d461903aff58d65e0abdd66c12fc461d6c604fc6db4c6044322a4fa5)
+- **Authorization:** `protonnz@active`
+
+```json
+{
+  "account": "protonnz",
+  "code": "delphioracle",
+  "type": "write",
+  "requirement": "oracle"
+}
+```
+
+### Verify it took
+
+```bash
+curl -s https://proton.eosusa.io/v1/chain/get_account \
+  -d '{"account_name":"protonnz"}' \
+  | jq '.permissions[] | select(.perm_name=="oracle") | .linked_actions'
+```
+
+```json
+[ { "account": "delphioracle", "action": "write" } ]
+```
+
+That's the success state. Your account, your txids, your timestamps will differ — but the action shapes and the verification output should match.
+
 ### Adding more linked actions later
 
 If you later want to push to additional contracts (e.g. the native `oracles` account, or a future xpr-native delphioracle replacement), add another link — don't broaden the permission:
