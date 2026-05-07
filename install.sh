@@ -65,6 +65,10 @@ NON_INTERACTIVE="${XPR_ORACLE_NONINTERACTIVE:-}"
 SKIP_BUILD=""
 SKIP_CHAIN_CHECKS=""
 ORACLE_PRIVATE_KEY_FILE=""
+# Default to the user running install.sh. This matches field reality on most
+# BP hosts, where claimrewards already runs from cron under that user and
+# keosd is already unlocked there with the right keys.
+RUN_USER="$(id -un)"
 
 #─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -142,6 +146,10 @@ FLAGS
   --oracle-private-key-file=<p>  Path to a file containing the oracle private key.
                                  Imported into keosd before pushing. In interactive
                                  mode, prompts for the key if not provided.
+  --user=<name>                  Linux user the systemd unit runs as.
+                                 Default: whoever runs install.sh. Match this to
+                                 the user that already runs your claimrewards cron
+                                 — that's where keosd has your keys.
   -h, --help                     This message
 
 ENV
@@ -163,6 +171,7 @@ while [[ $# -gt 0 ]]; do
     --skip-build)              SKIP_BUILD=1; shift ;;
     --skip-chain-checks)       SKIP_CHAIN_CHECKS=1; shift ;;
     --oracle-private-key-file=*) ORACLE_PRIVATE_KEY_FILE="${1#*=}"; shift ;;
+    --user=*)                  RUN_USER="${1#*=}"; shift ;;
     -h|--help)                 usage; exit 0 ;;
     *) fail "unknown flag: $1 (--help for usage)" ;;
   esac
@@ -190,7 +199,17 @@ step_prereqs() {
     ok "keosd running (pid $(pgrep -x keosd | head -1))"
   fi
 
-  command -v jq >/dev/null 2>&1 || fail "jq not found in PATH (sudo apt install jq / brew install jq)"
+  if ! command -v jq >/dev/null 2>&1; then
+    fail "jq not found in PATH.
+
+Install with one of:
+  sudo apt-get install -y jq          # Debian / Ubuntu
+  sudo dnf install -y jq              # Fedora / RHEL
+  sudo yum install -y jq              # older RHEL / CentOS
+  brew install jq                     # macOS
+
+Then re-run this script."
+  fi
   ok "jq $(jq --version)"
 
   command -v curl >/dev/null 2>&1 || fail "curl not found in PATH"
@@ -564,24 +583,44 @@ install_systemd() {
   fi
   [[ -n "$INSTALL_SYSTEMD" ]] || { info "skipping systemd install"; return; }
 
-  info "Installing systemd unit (sudo)"
-  sudo useradd --system --home /var/lib/xpr-oracle --create-home --shell /usr/sbin/nologin xpr-oracle 2>/dev/null || true
-  sudo mkdir -p /opt/xpr-oracle /etc/xpr-oracle
-  sudo cp -r "$SCRIPT_DIR/dist" "$SCRIPT_DIR/package.json" /opt/xpr-oracle/
-  sudo cp "$SCRIPT_DIR/config.json" /etc/xpr-oracle/config.json
-  sudo cp "$SCRIPT_DIR/systemd/xpr-oracle.service" /etc/systemd/system/
-  sudo chown -R xpr-oracle:xpr-oracle /opt/xpr-oracle /etc/xpr-oracle /var/lib/xpr-oracle
-  sudo chmod 600 /etc/xpr-oracle/config.json
-
-  if [[ -n "$WALLET_PASSWORD_FILE" && -f "$WALLET_PASSWORD_FILE" ]]; then
-    sudo chown xpr-oracle:xpr-oracle "$WALLET_PASSWORD_FILE"
-    sudo chmod 600 "$WALLET_PASSWORD_FILE"
+  # Resolve the run-user's home directory (where keosd's wallet socket lives).
+  local run_home run_group config_path
+  if ! run_home=$(getent passwd "$RUN_USER" 2>/dev/null | cut -d: -f6); then
+    fail "user '$RUN_USER' not found in /etc/passwd. Pass --user=<existing-user> or create the user first."
   fi
+  run_group=$(id -gn "$RUN_USER")
+  config_path="$SCRIPT_DIR/config.json"
+
+  info "Installing systemd unit (sudo) — runs as $RUN_USER:$run_group"
+
+  # Substitute the placeholders in the unit template and write to /etc/systemd/system.
+  local tmp_unit
+  tmp_unit=$(mktemp)
+  sed -e "s|PLACEHOLDER_USER|$RUN_USER|g" \
+      -e "s|PLACEHOLDER_GROUP|$run_group|g" \
+      -e "s|PLACEHOLDER_WORKING_DIR|$SCRIPT_DIR|g" \
+      -e "s|PLACEHOLDER_CONFIG_PATH|$config_path|g" \
+      -e "s|PLACEHOLDER_HOME|$run_home|g" \
+      "$SCRIPT_DIR/systemd/xpr-oracle.service" > "$tmp_unit"
+
+  sudo cp "$tmp_unit" /etc/systemd/system/xpr-oracle.service
+  sudo chmod 644 /etc/systemd/system/xpr-oracle.service
+  rm -f "$tmp_unit"
+
+  # Tighten config.json perms so keosd password isn't world-readable.
+  chmod 600 "$config_path" 2>/dev/null || true
 
   sudo systemctl daemon-reload
   ok "systemd unit installed at /etc/systemd/system/xpr-oracle.service"
+  ok "  User=$RUN_USER  WorkingDirectory=$SCRIPT_DIR  HOME=$run_home"
+  ok "  Config=$config_path"
   info "Start with:  sudo systemctl enable --now xpr-oracle"
   info "Logs:        sudo journalctl -u xpr-oracle -f"
+  info "Verify:      systemctl is-active xpr-oracle"
+  echo
+  info "Note: the daemon runs as '$RUN_USER' so it talks to that user's keosd."
+  info "      Make sure keosd is up under that user (pgrep -u $RUN_USER keosd)"
+  info "      and the wallet is unlocked (cleos wallet list as $RUN_USER)."
 }
 
 #─────────────────────────────────────────────────────────────────────────────

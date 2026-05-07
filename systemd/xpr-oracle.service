@@ -1,29 +1,33 @@
 [Unit]
 Description=XPR Network oracle price pusher
 Documentation=https://github.com/paulgnz/xpr-oracle
-# keosd must be up so cleos can sign. nodeos is the push target.
-After=network-online.target keosd.service nodeos.service
+# nodeos is the push target. keosd is required for signing but is typically
+# user-level (started ad-hoc by the same user that runs claimrewards), not a
+# system service — so we don't require it as a systemd unit.
+After=network-online.target nodeos.service
 Wants=network-online.target
-Requires=keosd.service
 
 [Service]
 Type=simple
-User=xpr-oracle
-Group=xpr-oracle
-WorkingDirectory=/opt/xpr-oracle
-Environment=XPR_ORACLE_CONFIG=/etc/xpr-oracle/config.json
+# IMPORTANT: User/Group default to the same user that runs your claimrewards
+# cron, so the daemon talks to the SAME keosd that already has your keys.
+# install.sh sets these from --user=… (defaults to whoever runs install.sh).
+# If you want a dedicated xpr-oracle system user with isolated keosd, see
+# docs/BP-ONBOARDING.md §Advanced.
+User=PLACEHOLDER_USER
+Group=PLACEHOLDER_GROUP
+WorkingDirectory=PLACEHOLDER_WORKING_DIR
+Environment=XPR_ORACLE_CONFIG=PLACEHOLDER_CONFIG_PATH
 # PATH for the cleos subprocess. The daemon shells out to `cleos` and inherits
 # only what's in this unit's environment — there's no shell to read /etc/profile
 # or ~/.bashrc. Common cleos install locations are below; if your BP's cleos
 # lives somewhere else (e.g. /opt/eosio-2.0/bin), append it here.
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/eosio/bin
 # cleos looks for keosd's socket at $HOME/eosio-wallet/keosd.sock by default.
-# Since this unit runs as the xpr-oracle service user, that resolves to
-# /var/lib/xpr-oracle/eosio-wallet/keosd.sock — make sure your keosd is using
-# the same path, OR symlink the right one in, OR run keosd as the same user.
-# If keosd runs elsewhere, the cleanest fix is the daemon's WALLET_URL hook —
-# see docs/BP-ONBOARDING.md.
-Environment=HOME=/var/lib/xpr-oracle
+# install.sh sets HOME to the chosen user's actual home so cleos finds the
+# right keosd without symlinking. If your keosd is on a different socket,
+# set "walletUrl" in config.json instead.
+Environment=HOME=PLACEHOLDER_HOME
 # Adjust node path if you use a version manager (nvm, fnm, etc.)
 ExecStart=/usr/bin/node /opt/xpr-oracle/dist/index.js
 Restart=on-failure
