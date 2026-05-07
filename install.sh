@@ -583,15 +583,24 @@ install_systemd() {
   fi
   [[ -n "$INSTALL_SYSTEMD" ]] || { info "skipping systemd install"; return; }
 
-  # Pre-authenticate sudo so the daemon-reload + cp don't prompt mid-flow.
-  # Honors SUDO_ASKPASS if set; otherwise plain `sudo -v` reads from the TTY.
-  if ! sudo -v; then
-    fail "sudo authentication failed. Either run 'sudo -v' first to pre-cache,
-or set SUDO_ASKPASS=/path/to/askpass and re-run.
+  # Confirm sudo will work non-interactively for the rest of this function.
+  # `sudo -n true` succeeds iff credentials are cached or NOPASSWD is set —
+  # never prompts. We do NOT call `sudo -v` here because on older sudo
+  # (1.8.x on Ubuntu 20.04) `-v` ignores SUDO_ASKPASS unless paired with
+  # `-A`, which causes false failures in agent / non-TTY installs.
+  if ! sudo -n true 2>/dev/null; then
+    fail "sudo is not pre-authenticated for $(id -un). Choose one BEFORE re-running install.sh:
 
-For non-interactive installs (CI / agents):
-  echo \"\$SUDO_PASS\" | sudo -S -v
-  ./install.sh --install-systemd ..."
+  # Interactive (TTY available):
+  sudo -v && ./install.sh ...
+
+  # Non-interactive via SUDO_ASKPASS helper:
+  SUDO_ASKPASS=/path/to/askpass sudo -A -v && ./install.sh ...
+
+  # Non-interactive via stdin:
+  echo \"\$SUDO_PASS\" | sudo -S -v && ./install.sh ...
+
+  # Or skip --install-systemd entirely and run 'npm start' under your user."
   fi
 
   # Resolve the run-user's home directory (where keosd's wallet socket lives).
