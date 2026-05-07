@@ -4,9 +4,9 @@ A minimal, copy-pasteable price-pusher for **XPR Network Block Producers**. Fetc
 
 ## Why this matters now
 
-On 2026-05-07, [**Rob ([@robrigo](https://github.com/robrigo))**](https://github.com/robrigo) from **AtomicHub** asked active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly. Until today, only `saltant` was pushing, hourly — meaning the on-chain median was effectively single-sourced.
+On 2026-05-07, [**Rob ([@robrigo](https://github.com/robrigo))**](https://github.com/robrigo) from **AtomicHub** asked active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly.
 
-This repo is the daemon that fixes that.
+`saltant` deployed `delphioracle` on XPR Network in February 2025 and has run the sole pusher reliably ever since — this repo's contribution is a turnkey daemon to make it easy for more BPs to join in, broadening the on-chain median.
 
 We bootstrapped `protonnz` end-to-end in this repo's first session and verified the daemon works against live mainnet. First push: tx [`b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800), block 380898553, 2026-05-07 06:48:06 UTC. The on-chain `xprusd` median moved from single-sourced (`saltant=2850`) to dual-sourced (`median=2887` blending both pushers). The contract's only on-chain prerequisite is a properly configured `linkauth` from your BP to `delphioracle::write` — once that's in place, you can push.
 
