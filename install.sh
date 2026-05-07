@@ -136,7 +136,7 @@ FLAGS
   --permission=<perm>            Permission name (default: oracle)
   --endpoint=<url>               nodeos URL (default: auto-detected, fallback http://127.0.0.1:8888)
   --pairs=<csv>                  Pairs to push, comma-separated. Available:
-                                 xprusd, xbtcusd, xethusd, xusdcusd, xmdusd
+                                 xprusd, btcusd, ethusd, usdcusd, xmdusd
   --interval=<seconds>           Push interval (default: 300; min 60, max 3600)
   --wallet-password-file=<path>  chmod-600 file with the keosd wallet password
   --install-systemd              Install + enable the systemd unit

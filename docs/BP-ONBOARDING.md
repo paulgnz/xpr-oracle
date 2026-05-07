@@ -84,7 +84,7 @@ You should see one row with your account name and `score: 0`. Score doesn't gate
 
 ### The one governance step that still applies
 
-**Adding a new pair** (e.g. `btcusd`, `xbtcusd`) requires `newbounty`/`editbounty`/`editpair` actions which need saltant's auth or a BP multisig. That only matters if you want to push pairs that aren't already registered. As of 2026-05-07 only `xprusd` is registered. See [GOVERNANCE.md](GOVERNANCE.md).
+**Adding a new pair** (e.g. `btcusd`, `ethusd`) requires `newbounty`/`editbounty`/`editpair` actions which need saltant's auth or a BP multisig. That only matters if you want to push pairs that aren't already registered. As of 2026-05-07 only `xprusd` is registered. See [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 

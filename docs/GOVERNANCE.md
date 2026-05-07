@@ -31,7 +31,7 @@ The standard DelphiOracle pair-creation flow is two actions: `newbounty` propose
 
 ### Convention: price the underlying asset, not the wrapper
 
-Use `btcusd`, `ethusd`, `usdcusd` — not `btcusd`, `xethusd`, `xusdcusd`. Reasons:
+Use `btcusd`, `ethusd`, `usdcusd` — not `xbtcusd`, `xethusd`, `xusdcusd`. Reasons:
 
 1. Matches Metallicus's existing `oracles` contract (22 feeds, all named after the underlying — no `X`-prefix wrappers).
 2. Real liquidity is in the underlying asset's CEX markets; the XPR-side wrapper has near-zero standalone liquidity, so a `btcusd` pair would be fed from BTC sources anyway and the X-prefix would be a fiction.
