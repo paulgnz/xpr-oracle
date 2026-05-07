@@ -43,11 +43,15 @@ The exception is `xmdusd`: XMD is XPR-native via `xmd.token`, has no off-chain r
 
 | Pair | Underlying | Example feed list |
 |---|---|---|
-| `xprusd` | XPR (XPR-native) | `kucoin:XPR-USDT`, `bitget:XPRUSDT`, `mexc:XPRUSDT`, `gate:XPR_USDT`, `coingecko:proton` |
-| `btcusd` | BTC | `kucoin:BTC-USDT`, `coinbase:BTC-USD`, `kraken:XBTUSD`, `bitget:BTCUSDT`, `coingecko:bitcoin` |
-| `ethusd` | ETH | `kucoin:ETH-USDT`, `coinbase:ETH-USD`, `kraken:ETHUSD`, `bitget:ETHUSDT`, `coingecko:ethereum` |
-| `usdcusd` | USDC (≈1) | `coinbase:USDC-USD`, `kraken:USDCUSD`, `coingecko:usd-coin` |
-| `xmdusd` | USD reference (XPR-native peg) | `coinbase:USDC-USD`, `kraken:USDTUSD`, `coingecko:tether` (effectively ≈1.0 unless USDT/USDC depeg) |
+| `xprusd` | XPR (XPR-native) | `kucoin:XPR-USDT`, `mexc:XPRUSDT`, `gate:XPR_USDT`, `coingecko:proton` |
+| `btcusd` | BTC | `kucoin:BTC-USDT`, `coinbase:BTC-USD`, `kraken:XBTUSD`, `bitget:BTCUSDT`, `bitfinex:tBTCUSD`, `coingecko:bitcoin` |
+| `ethusd` | ETH | `kucoin:ETH-USDT`, `coinbase:ETH-USD`, `kraken:ETHUSD`, `bitget:ETHUSDT`, `bitfinex:tETHUSD`, `coingecko:ethereum` |
+| `usdcusd` | USDC (≈1) | `kraken:USDCUSD`, `bitstamp:USDCUSD`, `coingecko:usd-coin` |
+| `xmdusd` | USD reference (XPR-native peg) | `kraken:USDTUSD`, `bitstamp:USDTUSD`, `coingecko:tether` (≈1.0 unless USDT/USDC depeg) |
+
+**Notes on adapter exclusions:**
+- `bitget:XPRUSDT` was dropped — Bitget v2 returns HTTP 400 for this symbol (XPR was delisted from their spot market). Other Bitget pairs work fine.
+- `coinbase:USDC-USD` was dropped — Coinbase Exchange treats USDC as a settlement asset, not a tradable spot pair, so the URL 404s. Use `bitstamp:USDCUSD` and `kraken:USDCUSD` for direct USDC/USD markets.
 
 Don't try to source `btcusd` from a thinly-traded XPR-side AMM holding XBTC — it's circular and gameable. Source from the deepest CEX BTC/USDT or BTC/USD markets; the wrapper's peg risk is downstream from this pricing.
 

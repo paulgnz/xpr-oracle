@@ -39,11 +39,11 @@ readonly XPR_CHAIN_ID="384da888112027f0321850a169f737c33e53b388aad48b5adace4bab9
 
 # Pair → eligible feed list. Keep this in sync with docs/FEEDS.md.
 declare -A PAIR_FEEDS
-PAIR_FEEDS[xprusd]="kucoin:XPR-USDT bitget:XPRUSDT mexc:XPRUSDT gate:XPR_USDT coingecko:proton"
+PAIR_FEEDS[xprusd]="kucoin:XPR-USDT mexc:XPRUSDT gate:XPR_USDT coingecko:proton"
 PAIR_FEEDS[btcusd]="kucoin:BTC-USDT bitget:BTCUSDT mexc:BTCUSDT gate:BTC_USDT coinbase:BTC-USD kraken:XBTUSD bitfinex:tBTCUSD okx:BTC-USDT bybit:BTCUSDT coingecko:bitcoin"
 PAIR_FEEDS[ethusd]="kucoin:ETH-USDT bitget:ETHUSDT mexc:ETHUSDT gate:ETH_USDT coinbase:ETH-USD kraken:ETHUSD bitfinex:tETHUSD okx:ETH-USDT bybit:ETHUSDT coingecko:ethereum"
-PAIR_FEEDS[usdcusd]="coinbase:USDC-USD kraken:USDCUSD coingecko:usd-coin"
-PAIR_FEEDS[xmdusd]="coinbase:USDC-USD kraken:USDTUSD coingecko:tether"
+PAIR_FEEDS[usdcusd]="kraken:USDCUSD bitstamp:USDCUSD coingecko:usd-coin"
+PAIR_FEEDS[xmdusd]="kraken:USDTUSD bitstamp:USDTUSD coingecko:tether"
 
 declare -A PAIR_PRECISION
 PAIR_PRECISION[xprusd]=6
@@ -347,11 +347,11 @@ select_feeds_for_pair() {
   local available=(${PAIR_FEEDS[$pair]})
   local selected_default
   case "$pair" in
-    xprusd)  selected_default="kucoin:XPR-USDT,bitget:XPRUSDT,mexc:XPRUSDT,gate:XPR_USDT,coingecko:proton" ;;
+    xprusd)  selected_default="kucoin:XPR-USDT,mexc:XPRUSDT,gate:XPR_USDT,coingecko:proton" ;;
     btcusd)  selected_default="kucoin:BTC-USDT,coinbase:BTC-USD,kraken:XBTUSD,bitget:BTCUSDT,coingecko:bitcoin" ;;
     ethusd)  selected_default="kucoin:ETH-USDT,coinbase:ETH-USD,kraken:ETHUSD,bitget:ETHUSDT,coingecko:ethereum" ;;
-    usdcusd) selected_default="coinbase:USDC-USD,kraken:USDCUSD,coingecko:usd-coin" ;;
-    xmdusd)  selected_default="coinbase:USDC-USD,kraken:USDTUSD,coingecko:tether" ;;
+    usdcusd) selected_default="kraken:USDCUSD,coingecko:usd-coin" ;;
+    xmdusd)  selected_default="kraken:USDTUSD,coingecko:tether" ;;
   esac
 
   if ! is_interactive; then

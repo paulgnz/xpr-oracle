@@ -68,6 +68,16 @@ const adapters: Record<string, FeedAdapter> = {
     return num(key ? j.result?.[key]?.c?.[0] : undefined, `kraken:${symbol}`);
   },
 
+  // Bitstamp — symbol is lowercase concatenated (e.g. "btcusd", "usdcusd").
+  // Particularly useful for USDC/USD and USDT/USD where Coinbase doesn't list
+  // a direct market (USDC is a settlement asset on Coinbase, not spot-traded).
+  bitstamp: async (symbol) => {
+    const j = await fetchJson<{ last: string }>(
+      `https://www.bitstamp.net/api/v2/ticker/${symbol.toLowerCase()}/`,
+    );
+    return num(j?.last, `bitstamp:${symbol}`);
+  },
+
   // Bitfinex — symbol prefixed with "t", e.g. "tBTCUSD". Response is a flat
   // array; index 6 is LAST_PRICE per the v2 ticker spec.
   bitfinex: async (symbol) => {
