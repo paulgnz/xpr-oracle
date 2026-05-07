@@ -145,10 +145,12 @@ Pushing to both is straightforward (just add another `linkauth` and another cont
 ## Upgrading
 
 ```bash
-cd ~/xpr-oracle && ./bin/upgrade.sh
+cd ~/xpr-oracle && git pull && ./bin/upgrade.sh
 ```
 
-Handles `git pull` + `npm install` + `npm run build` + `systemctl restart` in one command. **Required** when source has changed: systemd's `ExecStart` runs the compiled `dist/index.js`, so `git pull` alone won't pick up source updates without a rebuild.
+The `git pull` acquires the latest `bin/upgrade.sh` itself (added in v0.1.3 — earlier installs don't have it). Once you have the script, all subsequent upgrades are just `./bin/upgrade.sh` — it does its own pull internally.
+
+The script handles `git pull` + `npm install` + `npm run build` + `systemctl restart` in one command, with a status check after restart. **Required** when source has changed: systemd's `ExecStart` runs the compiled `dist/index.js`, so a bare `git pull` won't pick up source updates without a rebuild.
 
 ## Monitoring
 
