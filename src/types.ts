@@ -41,6 +41,11 @@ export interface Config {
    * --unlock-timeout, separate cron, etc.).
    */
   walletPasswordFile?: string;
+  /**
+   * Optional path to a file `touch`ed after every successful push.
+   * Used by `monitor.sh` to detect stale pushers and fire a Telegram alert.
+   */
+  heartbeatFile?: string;
   pairs: PairConfig[];
 }
 

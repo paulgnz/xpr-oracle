@@ -69,7 +69,7 @@ Every transaction includes a TaPoS (transaction-as-proof-of-stake) reference to 
      | xargs -I {} date -d {} +%s \
      | awk '{ now=systime(); if (now - $1 > 10) print "lag:", now-$1, "s" }'
    ```
-2. **Have a fallback chain entry.** Keep `proton chain:add proton` (the public endpoint) configured even if you don't use it day-to-day. If your local node falls behind, switch the daemon's chain target with one command and let the public endpoint carry the load while you investigate.
+2. **Keep a fallback endpoint URL handy** (e.g. `https://proton.eosusa.io`). If your local node falls behind, swap `endpoint` in `config.json` and `systemctl restart xpr-oracle` — the public endpoint carries the load while you investigate.
 
 ## Wallet password handling
 

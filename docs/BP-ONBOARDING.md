@@ -1,25 +1,20 @@
 # BP Onboarding
 
-End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network.
+End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network. **No whitelist, no multisig, no saltant approval needed** — verified empirically when `protonnz` self-bootstrapped on 2026-05-07. The daemon's authority is exclusively the BP's own permission and linkauth.
 
-> All commands assume `cleos` and `keosd` are available on the host (they ship with nodeos and are already running for any BP using the standard [`xpr.start`](https://github.com/XPRNetwork/xpr.start) stack). The daemon talks to whatever URL you set as `endpoint` in `config.json` — recommended is your local nodeos. See [LOCAL-NODE.md](LOCAL-NODE.md). `@proton/cli` is optional and useful for human ops (account queries, multisig) but is **not** in the daemon's hot path.
+> Prereqs: `cleos` and `keosd` are available on the host (they ship with nodeos and are running for any BP using the standard [`xpr.start`](https://github.com/XPRNetwork/xpr.start) stack). The daemon talks to whatever URL you set as `endpoint` in `config.json`. Run on your **API node**, not your producer node — see [HOSTING.md](HOSTING.md).
+>
+> **The fast path is `./install.sh`** — it walks you through everything below interactively. The sections here exist for operators who want to understand what the script is doing.
 
 ---
 
 ## 1. Decide: same account or sub-account?
 
-You have two options for the signing identity. Either is fine; pick what fits your ops model.
-
 **Option A — Dedicated permission on your existing BP account (recommended).**
 You keep one account but add a low-privilege `oracle` permission whose key only signs `delphioracle::write`. If that key is ever compromised, the blast radius is "attacker can push bad prices" — they cannot move funds, change voting, or touch the BP itself. See [PERMISSIONS.md](PERMISSIONS.md).
 
 **Option B — Separate XPR account.**
-Create a fresh account like `mybporacle`. Cleaner separation, easier to rotate, but costs you one account's RAM and a small XPR stake. Use this if you want oracle ops fully isolated from BP ops.
-
-```bash
-# Option B: create the dedicated account (replace placeholders)
-proton account:create mybporacle EOS_PUBLIC_KEY EOS_PUBLIC_KEY -c mybp
-```
+Create a fresh account like `mybporacle`. Cleaner separation, easier to rotate, but costs you one account's RAM and a small XPR stake. Use this if you want oracle ops fully isolated from BP ops. Account creation on XPR Network typically goes through https://account.metalx.com or your existing WebAuth flow — there is no `cleos system newaccount` analogue that handles RAM/stake automatically.
 
 For the rest of this doc, `<ACCOUNT>` = whichever account ends up signing, and `<PERM>` = `oracle` (Option A) or `active` (Option B, fine because the account does nothing else).
 
@@ -38,74 +33,58 @@ cleos --url http://127.0.0.1:8888 wallet import
 # paste the private key when prompted
 ```
 
-If using **Option A**, do **both** of the following — see [PERMISSIONS.md](PERMISSIONS.md) for full commands:
+Then attach the matching public key as a permission on your BP account and link `delphioracle::write` to it. Concrete commands and the on-chain action shapes (for Anchor / Bloks / WebAuth signers) are in [PERMISSIONS.md](PERMISSIONS.md). Two transactions, ~45 seconds apart, exactly like the worked example for `protonnz`.
 
-1. **Create the permission** — attach the public key as a new `oracle` permission parented to `active` (`updateauth`).
-2. **Link the action to it** — point `delphioracle::write` at the new permission via `linkauth`.
+**Verify on-chain before continuing:**
 
-Without step 2 the permission can sign nothing — EOSIO actions default to requiring `<account>@active`, so an unlinked child permission is non-functional and every push will fail with `missing authority of <account>/oracle`.
+```bash
+curl -s https://proton.eosusa.io/v1/chain/get_account \
+  -d '{"account_name":"<ACCOUNT>"}' \
+  | jq '.permissions[] | select(.perm_name=="<PERM>") | .linked_actions'
+```
+
+Expected: `[ { "account": "delphioracle", "action": "write" } ]`. **If this is empty, every push will fail with `missing authority`.**
 
 ---
 
-## 3. Request whitelisting on `delphioracle`
+## 3. Register yourself with `delphioracle::reguser` (1 transaction, 30 seconds)
 
-The on-chain `delphioracle` contract on XPR Network is governed by the BP multisig (`eosio.prods@active` is in its `active` permission). To start submitting prices, your account needs to be approved as an oracle producer for the pair(s) you want to push.
+There's **no whitelist request, no multisig, no saltant approval** — verified empirically when `protonnz` self-bootstrapped on 2026-05-07 ([tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)). The contract's `write` action only checks the on-chain `linkauth` from §2. Once that's in place, you're good.
 
-There is no fully self-service "apply" action in the deployed contract today, so the process is:
+You should still call `reguser` once to put yourself in the `users` table cleanly. It's free, takes one transaction, and you sign it with your **own** active key.
 
-### 3a. Open a request
+### Easiest: via the explorer UI (if your active key is in Anchor/Bloks/WebAuth)
 
-Open a PR or issue on this repository (or wherever your community tracks oracle ops) including:
+Most BPs hold their `active` key in a wallet, not in `cleos`. Use the explorer:
 
-- BP account name being whitelisted
-- Permission you'll sign with (e.g. `mybp@oracle`)
-- Pairs you intend to push (e.g. `xprusd`)
-- Push interval and CEX sources
-- Public key for the oracle permission
-- Confirmation you've run `npm run dry-run` cleanly for ≥24h
+1. Go to **https://explorer.xprnetwork.org/account/delphioracle**
+2. Click the **Contract** tab → **Actions** → **`reguser`**
+3. Fill in `owner` = your BP account name (e.g. `protonnz`)
+4. Sign the transaction with your wallet (Anchor / Bloks / WebAuth — same wallet you use for `claimrewards`)
 
-### 3b. BP multisig approval
+That's it. You're registered.
 
-A coordinating BP proposes the on-chain action that adds you. Because `delphioracle@active` includes `eosio.prods@active`, this needs **15-of-21 BPs** to approve.
-
-The proposing BP runs (concrete action depends on the contract path used to register oracles — see [GOVERNANCE.md](GOVERNANCE.md) for current options and exact JSON):
+### Alternative: via `cleos` (if your active key is already in `keosd`)
 
 ```bash
-# Example shape — adapt to whichever delphioracle action governs oracle approval
-proton multisig:propose addOracleRequest123 \
-  '[{"actor":"eosio.prods","permission":"active"}]' \
-  '[{"actor":"<delphioracle-action-actor>","permission":"<perm>"}]' \
-  delphioracle <action> '<json-data>'
+cleos --url http://127.0.0.1:8888 push action delphioracle reguser \
+  '{"owner":"<ACCOUNT>"}' \
+  -p <ACCOUNT>@active
 ```
 
-Other BPs review and approve:
-
-```bash
-proton multisig:approve <proposer> addOracleRequest123 \
-  '{"actor":"<bp-account>","permission":"active"}'
-```
-
-Once threshold is hit, anyone can execute:
-
-```bash
-proton multisig:exec <proposer> addOracleRequest123 <executor>
-```
-
-### 3c. Verify approval
-
-```bash
-proton table delphioracle delphioracle producers   # may require ABI; see notes
-proton table delphioracle delphioracle users
-```
-
-If `proton table` rejects the table due to ABI gaps, query via raw RPC:
+### Verify
 
 ```bash
 curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
-  -d '{"code":"delphioracle","scope":"delphioracle","table":"producers","limit":50,"json":true}'
+  -d '{"code":"delphioracle","scope":"delphioracle","table":"users","limit":50,"json":true}' \
+  | jq '.rows[] | select(.name=="<ACCOUNT>")'
 ```
 
-You can also just **try a write** — if you're not whitelisted, the action fails with a clear assertion.
+You should see one row with your account name and `score: 0`. Score doesn't gate writes — saltant has been pushing for over a year with score 0.
+
+### The one governance step that still applies
+
+**Adding a new pair** (e.g. `btcusd`, `xbtcusd`) requires `newbounty`/`editbounty`/`editpair` actions which need saltant's auth or a BP multisig. That only matters if you want to push pairs that aren't already registered. As of 2026-05-07 only `xprusd` is registered. See [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 
@@ -113,23 +92,31 @@ You can also just **try a write** — if you're not whitelisted, the action fail
 
 ```bash
 git clone https://github.com/paulgnz/xpr-oracle && cd xpr-oracle
+
+# the easy way
+./install.sh
+
+# or by hand:
 npm install
 npm run build
 cp config.example.json config.json
+$EDITOR config.json
 ```
 
-Edit `config.json`:
+Minimum config:
 
 ```json
 {
   "account": "<ACCOUNT>",
   "permission": "<PERM>",
   "contract": "delphioracle",
-  "intervalSeconds": 60,
+  "endpoint": "http://127.0.0.1:8888",
+  "intervalSeconds": 300,
+  "walletPasswordFile": "/etc/xpr-oracle/wallet.pw",
   "pairs": [
     {
       "name": "xprusd",
-      "feeds": ["kucoin:XPR-USDT", "bitget:XPRUSDT"],
+      "feeds": ["kucoin:XPR-USDT", "bitget:XPRUSDT", "mexc:XPRUSDT", "gate:XPR_USDT", "coingecko:proton"],
       "quotedPrecision": 6,
       "maxDeviationPct": 2.5,
       "minSources": 2
@@ -142,7 +129,29 @@ Edit `config.json`:
 
 ---
 
-## 5. Dry run
+## 5. Wallet password handling
+
+`cleos wallet unlock` needs the wallet password. Three options:
+
+**Recommended — chmod-600 file:**
+
+```bash
+sudo mkdir -p /etc/xpr-oracle
+sudo install -m 0600 /dev/null /etc/xpr-oracle/wallet.pw
+echo 'PW5K…your wallet password…' | sudo tee /etc/xpr-oracle/wallet.pw
+```
+
+Reference it as `walletPasswordFile` in `config.json`. The daemon reads it before every push (so password rotation works without restart) and refuses to start if the file mode permits group/world reads.
+
+**Env var:** add `Environment=XPR_ORACLE_WALLET_PW=…` to the systemd unit. Slightly worse (visible in `/proc/<pid>/environ` and `systemctl show`), but works.
+
+**External keosd unlock:** run `keosd --unlock-timeout 9999999` and unlock once at boot via a separate mechanism. Leave `walletPasswordFile` and the env var unset; the daemon skips the unlock step.
+
+The daemon **always** delivers the password to cleos via stdin, never argv — so it's invisible in `ps -ef` regardless of which path you choose.
+
+---
+
+## 6. Dry run
 
 ```bash
 npm run dry-run
@@ -152,29 +161,29 @@ Confirm logs show all your feeds returning sane prices and the median lines up w
 
 ---
 
-## 6. Live test push
-
-Before approval comes through, you can verify your CLI auth works against a harmless action (e.g. a self-transfer of 0.0001 XPR). After approval:
+## 7. Live test push
 
 ```bash
 npm start
 ```
 
-Watch the first few cycles. You should see `push ok: <txid>` lines. Look the txids up on https://explorer.xprnetwork.org.
+Watch the first few cycles. You should see `push ok: <txid>` lines. Look the txids up on https://explorer.xprnetwork.org/account/delphioracle.
+
+If your first push fails:
+
+| Error | Fix |
+|---|---|
+| `missing authority of <ACCOUNT>/oracle` | Linkauth not in place — recheck §2. |
+| `expired_tx_exception` | Your local nodeos is lagging — check head_block_time freshness. |
+| `assertion failure with message: …` | Open an issue with the full message; Atomic Assets API checks may have changed. |
 
 ---
 
-## 7. Production install (systemd)
+## 8. Production install (systemd)
 
-> **Before `systemctl enable --now`, confirm the `linkauth` is on-chain.** If `delphioracle::write` isn't linked to your `oracle` permission, the daemon will start cleanly and then fail every push with `missing authority`. Verify with `get_account`:
->
-> ```bash
-> curl -s https://proton.eosusa.io/v1/chain/get_account \
->   -d '{"account_name":"<ACCOUNT>"}' \
->   | jq '.permissions[] | select(.perm_name=="oracle") | .linked_actions'
-> ```
->
-> Expected: `[ { "account": "delphioracle", "action": "write" } ]`. Empty array or no `delphioracle/write` entry → see [PERMISSIONS.md](PERMISSIONS.md) §3.
+> **Before `systemctl enable --now`, confirm the linkauth is on-chain** (§2 verify command). If you skipped that, every push will fail with `missing authority`.
+
+`./install.sh --install-systemd` does all of this. By hand:
 
 ```bash
 # system user, no shell
@@ -182,7 +191,7 @@ sudo useradd --system --home /var/lib/xpr-oracle --create-home --shell /usr/sbin
 
 # code + config
 sudo mkdir -p /opt/xpr-oracle /etc/xpr-oracle
-sudo cp -r dist package.json node_modules /opt/xpr-oracle/
+sudo cp -r dist package.json /opt/xpr-oracle/
 sudo cp config.json /etc/xpr-oracle/config.json
 sudo chown -R xpr-oracle:xpr-oracle /opt/xpr-oracle /etc/xpr-oracle /var/lib/xpr-oracle
 sudo chmod 600 /etc/xpr-oracle/config.json
@@ -191,7 +200,7 @@ sudo chmod 600 /etc/xpr-oracle/config.json
 sudo install -m 0600 -o xpr-oracle -g xpr-oracle /dev/null /etc/xpr-oracle/wallet.pw
 echo 'PW5K…your wallet password…' | sudo tee /etc/xpr-oracle/wallet.pw
 
-# import the oracle key into the keosd wallet on this host (one time)
+# import the oracle key into the keosd wallet on this host (if not done in §2)
 cleos --url http://127.0.0.1:8888 wallet import   # paste the oracle private key
 
 # install the unit
@@ -205,16 +214,17 @@ If your BP node uses nvm/fnm, fix `ExecStart` in the unit file to point at the r
 
 ---
 
-## 8. Monitor
+## 9. Monitor
 
 Minimum viable monitoring:
 
 - `journalctl -u xpr-oracle -f` for live logs.
 - Alert on the unit being inactive: `systemctl is-active xpr-oracle`.
-- Alert on freshness — a separate cron that queries `delphioracle::datapoints` and pages you if your account hasn't pushed in N minutes.
+- **Heartbeat freshness via Telegram** — set `heartbeatFile` in config, then run `monitor.sh` from cron with your bot token. See the script's header comment.
+- Verify pushes are landing on-chain at https://explorer.xprnetwork.org/account/delphioracle.
 
 ---
 
-## 9. Rotate keys periodically
+## 10. Rotate keys periodically
 
-Generate a new oracle keypair, attach it to your `oracle` permission alongside the old one (raise threshold momentarily if needed), swap it in on the host, then drop the old key from the permission. This keeps continuity while replacing the on-disk secret.
+Generate a new oracle keypair, attach it to your `oracle` permission alongside the old one, swap it in on the host, then drop the old key from the permission. The `delphioracle::write` linkauth survives because it's tied to the permission name, not the key. Concrete commands in [PERMISSIONS.md](PERMISSIONS.md) §Recovery.

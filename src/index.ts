@@ -8,7 +8,7 @@
  * before whitelist approval).
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, utimesSync, openSync, closeSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Config, FeedSample, PairConfig } from "./types.js";
 import { fetchFeed } from "./feeds.js";
@@ -127,6 +127,17 @@ async function gatherPair(pair: PairConfig): Promise<Quote | null> {
 
 const backoff = newBackoffState();
 
+/** Update mtime of the heartbeat file (creating it if necessary). monitor.sh reads this. */
+function touchHeartbeat(path: string): void {
+  try {
+    if (!existsSync(path)) closeSync(openSync(path, "a"));
+    utimesSync(path, new Date(), new Date());
+  } catch (e) {
+    // Heartbeat is best-effort; log but don't crash the tick.
+    log.warn(`heartbeat write failed: ${(e as Error).message}`);
+  }
+}
+
 async function tick(cfg: Config, dryRun: boolean): Promise<void> {
   // Skip the entire tick if we're inside a permanent-error backoff window.
   if (shouldSkipForBackoff(backoff)) {
@@ -155,6 +166,7 @@ async function tick(cfg: Config, dryRun: boolean): Promise<void> {
     const out = await pushQuotes(cfg, quotes);
     log.info(`push ok: ${out}`);
     recordSuccess(backoff);
+    if (cfg.heartbeatFile) touchHeartbeat(cfg.heartbeatFile);
   } catch (e) {
     const { kind, delayMs } = recordFailure(backoff, e);
     if (kind === "permanent") {

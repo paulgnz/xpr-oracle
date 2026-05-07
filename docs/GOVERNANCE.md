@@ -1,119 +1,160 @@
-# Governance: pairs and oracle approvals
+# Governance: pair creation on `delphioracle`
 
-The `delphioracle` contract on XPR Network mainnet is governed by the BP multisig — its `active` permission includes `eosio.prods@active`, so any change requires 15-of-21 BPs. There is no central admin. As of 2026-05, the contract has only one registered pair (`xprusd`) and an empty custodian set; reviving it is a community effort and the kind of work this repo is meant to support.
+**Onboarding as an oracle is not a governance step.** Verified empirically on 2026-05-07 ([tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)) — a BP with `linkauth` to `delphioracle::write` can push immediately, no whitelist, no multisig, no saltant approval. See [BP-ONBOARDING.md](BP-ONBOARDING.md) §3.
 
-This document collects the on-chain shapes and `proton` CLI commands needed to add pairs and approve oracles via that BP multisig path.
+The only on-chain governance step that *does* still apply is **adding a new pair** to the contract's pair set. Until a pair is registered, pushes naming it fail. As of 2026-05-07 only `xprusd` is registered.
+
+This doc shows how to propose a new pair.
+
+## Snapshot (2026-05-07)
+
+| | |
+|---|---|
+| `delphioracle::pairs` | 1 row — `xprusd` (precision 6) |
+| `delphioracle::users` | 2 rows — `saltant`, `protonnz` |
+| `delphioracle::custodians` | 0 rows (empty) |
+| `delphioracle::write` actions | ~10,000 ever, all by saltant until 2026-05-07 |
+| `delphioracle@active` perm | threshold 1, keys: saltant's, plus `delphioracle@eosio.code` self-perm and `eosio.prods@active` (BP multisig) — any one can authorize |
+
+## Two paths for adding a pair
+
+The contract's `active` perm is threshold-1 with three weight-1 entries, so **either of these alone is sufficient**:
+
+1. **Saltant signs solo.** He holds the key. DM him on the BP Telegram. ~Minutes.
+2. **BP multisig** via `eosio.prods@active`. Requires 15-of-21 BP approvals. ~Days, much heavier.
+
+In practice nobody has used path 2 since the contract was deployed in Feb 2025. Path 1 is the operational reality. Use BP multisig only if saltant declines or is unreachable.
+
+## Pair shape — `eosio::newbounty` + `eosio::editbounty`
+
+The standard DelphiOracle pair-creation flow is two actions: `newbounty` proposes the name, `editbounty` fills in the fields.
+
+### Example: `xbtcusd` (XBTC priced in USD, fed from BTC CEX symbols)
+
+**Action 1 — `delphioracle::newbounty`:**
+
+```json
+{
+  "name": "xbtcusd",
+  "proposer": "saltant"
+}
+```
+
+**Action 2 — `delphioracle::editbounty`:**
+
+```json
+{
+  "name": "xbtcusd",
+  "base_symbol": "8,XBTC",
+  "base_type": 4,
+  "base_contract": "xtokens",
+  "quote_symbol": "2,USD",
+  "quote_type": 1,
+  "quote_contract": "",
+  "quoted_precision": 4
+}
+```
+
+`base_type` and `quote_type` are enums in the contract's `asset_type` definition; `4` = a fungible token, `1` = a fiat reference. Match the convention used for the existing `xprusd` pair.
+
+### Example: `btcusd` (BTC/USD reference, no XPR-side wrapper)
+
+```json
+{ "name": "btcusd", "proposer": "saltant" }
+```
+
+```json
+{
+  "name": "btcusd",
+  "base_symbol": "8,BTC",
+  "base_type": 4,
+  "base_contract": "",
+  "quote_symbol": "2,USD",
+  "quote_type": 1,
+  "quote_contract": "",
+  "quoted_precision": 4
+}
+```
+
+## How to actually propose
+
+### Path 1: DM saltant (Telegram)
+
+Copy this template, fill in the fields, post in the BP Telegram:
+
+> Hi @Sa1tant — could you add the `<pair-name>` pair to delphioracle? Atomic Drops needs it for `<reason>`. Two actions:
+>
+> ```json
+> // newbounty
+> { "name": "<pair-name>", "proposer": "saltant" }
+> ```
+>
+> ```json
+> // editbounty
+> {
+>   "name": "<pair-name>",
+>   "base_symbol": "<precision,SYMBOL>",
+>   "base_type": 4,
+>   "base_contract": "<contract>",
+>   "quote_symbol": "2,USD",
+>   "quote_type": 1,
+>   "quote_contract": "",
+>   "quoted_precision": <precision>
+> }
+> ```
+>
+> Both signed as `delphioracle@active`. Once landed, BPs will start feeding it on a 5-min interval.
+
+### Path 2: BP multisig (only if path 1 stalls)
+
+```bash
+# Save the proposed transaction as JSON
+cat > /tmp/addpair.json <<'EOF'
+{
+  "expiration": "2026-05-14T12:00:00",
+  "ref_block_num": 0,
+  "ref_block_prefix": 0,
+  "max_net_usage_words": 0,
+  "max_cpu_usage_ms": 0,
+  "delay_sec": 0,
+  "context_free_actions": [],
+  "actions": [
+    {
+      "account": "delphioracle",
+      "name": "newbounty",
+      "authorization": [{"actor":"eosio.prods","permission":"active"}],
+      "data": {"name":"xbtcusd","proposer":"saltant"}
+    }
+  ],
+  "transaction_extensions": []
+}
+EOF
+
+cleos --url http://127.0.0.1:8888 multisig propose_trx addxbtcusd \
+  '[{"actor":"eosio.prods","permission":"active"}]' \
+  /tmp/addpair.json \
+  <proposer-bp>
+```
+
+15+ BPs approve via `cleos multisig approve <proposer-bp> addxbtcusd '{"actor":"<their-bp>","permission":"active"}' -p <their-bp>@active`. Then anyone executes via `cleos multisig exec <proposer-bp> addxbtcusd <executor> -p <executor>@active`.
 
 ## Verifying current state
 
 ```bash
 # Active pairs
 curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
-  -d '{"code":"delphioracle","scope":"delphioracle","table":"pairs","limit":50,"json":true}'
+  -d '{"code":"delphioracle","scope":"delphioracle","table":"pairs","limit":50,"json":true}' \
+  | jq '.rows[] | {name, active, base_symbol, quote_symbol, quoted_precision}'
 
 # Registered users / oracles
 curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
   -d '{"code":"delphioracle","scope":"delphioracle","table":"users","limit":50,"json":true}'
 
-# Custodians (currently empty)
-curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
-  -d '{"code":"delphioracle","scope":"delphioracle","table":"custodians","limit":50,"json":true}'
-
-# Full ABI (action signatures)
+# Full ABI
 curl -s https://proton.eosusa.io/v1/chain/get_abi \
-  -d '{"account_name":"delphioracle"}'
+  -d '{"account_name":"delphioracle"}' | jq '.abi.actions, .abi.structs[] | select(.name=="newbounty" or .name=="editbounty")'
 ```
 
-## Available actions
+## A note on the future
 
-The deployed ABI exposes these actions (relevant ones bolded):
-
-| Action | Use |
-|---|---|
-| `configure` | Update contract config |
-| `addcustodian` / `delcustodian` | Manage custodian set |
-| **`reguser`** | Register a user/oracle |
-| `updateusers` | Update user metadata |
-| `voteabuser` | Flag misbehaving oracle |
-| **`newbounty`** / `editbounty` / `cancelbounty` / `votebounty` / `unvotebounty` | Pair-creation bounty workflow |
-| `editpair` / `deletepair` | Pair management |
-| **`write`** | Submit a quote |
-| `writehash` / `forfeithash` | Hash-then-reveal flow |
-| `migratedata` / `clear` | Maintenance |
-
-The standard DelphiOracle pair-creation flow is **bounty-based**: someone proposes a pair via `newbounty`, oracles signal interest by voting, custodians (or BP multisig in our case) approve, and the pair becomes active.
-
-## Adding a new pair (BP multisig)
-
-### 1. Draft the action
-
-Use `newbounty` (or `editpair` if rehydrating an existing one). The exact JSON depends on the action — fetch the latest ABI and match its struct fields. Example shape for `newbounty`:
-
-```json
-{
-  "name": "btcusd",
-  "proposer": "delphioracle"
-}
-```
-
-…then a follow-up `editbounty` to set base/quote symbols, contracts, precision, etc. Read the ABI before composing the JSON; the on-chain struct names are the source of truth.
-
-### 2. Propose via multisig
-
-```bash
-proton multisig:propose \
-  add-btcusd-pair \
-  '[{"actor":"eosio.prods","permission":"active"}]' \
-  '[{"actor":"delphioracle","permission":"active"}]' \
-  delphioracle newbounty \
-  '{"name":"btcusd","proposer":"delphioracle"}'
-```
-
-### 3. Collect approvals
-
-Other BPs run:
-
-```bash
-proton multisig:approve <proposer> add-btcusd-pair \
-  '{"actor":"<their-bp>","permission":"active"}'
-```
-
-15+ approvals required.
-
-### 4. Execute
-
-Anyone can execute once threshold is met:
-
-```bash
-proton multisig:exec <proposer> add-btcusd-pair <executor>
-```
-
-## Approving an oracle (BP multisig)
-
-Same pattern, but the action is `reguser` (or whichever action the contract is using to populate the producers/users table — confirm via the ABI before you propose):
-
-```bash
-proton multisig:propose \
-  approve-oracle-mybp \
-  '[{"actor":"eosio.prods","permission":"active"}]' \
-  '[{"actor":"delphioracle","permission":"active"}]' \
-  delphioracle reguser \
-  '{"name":"mybp"}'
-```
-
-Whichever action the deployed contract requires, keep the JSON in this repo under `governance/<request>.json` so the multisig is reproducible from the PR.
-
-## Why route everything through this repo
-
-- **Reproducibility.** The exact JSON proposed on-chain is in git history.
-- **Visibility.** BPs reviewing a multisig can read the PR before approving.
-- **Coordination.** The PR doubles as the place to track approvals and hand off the executing BP.
-
-## Becoming a custodian (alternative, lower-friction model)
-
-If the BP set wants a faster oracle-approval cadence than 15-of-21 multisig, the path is:
-
-1. Use the BP multisig **once** to call `addcustodian` and seat 5–7 trusted custodians.
-2. Custodians thereafter approve oracles and pairs without needing the full 15/21.
-
-That's a meaningful governance shift — propose it as a separate discussion before the first technical multisig.
+The WAX blockchain has an [Oracle Integrity Group](https://oig.wax.io) (OIG) that requires participating BPs to feed the WAX oracle and applies penalties for missing pushes — making oracle uptime a measurable, enforceable BP duty rather than volunteer work. EOSUSA Michael floated this in the BP Telegram on 2026-05-07 as a model XPR could adopt once there's a stable cohort of pushers. Empty custodians today, custodians tomorrow, OIG-style enforcement eventually.

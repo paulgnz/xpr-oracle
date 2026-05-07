@@ -25,10 +25,33 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
 ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
 RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 LockPersonality=true
-# proton CLI keystore lives under the service user's $HOME — leave that writable
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @debug
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+KeyringMode=private
+DevicePolicy=closed
+
+# Don't loop indefinitely on a permanently bad config
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Leave the service user's home writable for keosd-related cache files (cleos
+# stores ~/eosio-wallet/ here when reading the keosd wallet directory).
 ReadWritePaths=/var/lib/xpr-oracle
 
 [Install]

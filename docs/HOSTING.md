@@ -1,6 +1,16 @@
 # Hosting the pusher
 
-You asked the right question: *should I run this on my BP node, or on a Railway/cloud instance?* Short answer: **on your BP node, as a separate systemd unit and a separate Linux user.** Other options are fine for testing.
+You asked the right question: *should I run this on my BP node, or somewhere else?* Short answer: **on your API node, not your producer node. Same machine you serve `chain_api_plugin` and `history_api_plugin` from.** Run as a separate systemd unit under a separate Linux user. Other options are fine for testing.
+
+## API node, not producer node
+
+Producer nodes have one job: sign blocks. Mixing oracle workload (outbound CEX HTTPS, keosd unlocks, cleos subprocess churn) on the producer creates:
+
+- **Resource contention.** A spike in CEX latency or DNS resolution can slow down the producer's networking right when it needs to propose a block.
+- **Attack surface.** Outbound HTTP to ten CEX domains and access to a wallet password file are surfaces you do not want adjacent to the producer's signing key.
+- **Operational coupling.** A bug in this daemon shouldn't be able to take a producer offline.
+
+API nodes are designed for the kind of workload this daemon represents — HTTP RPC traffic, occasional CPU bursts, easy horizontal replacement. The [xpr.start](https://github.com/XPRNetwork/xpr.start) reference setup runs them on separate hosts. If you've followed that, the answer is: install on the API node.
 
 ## Recommended: alongside your BP node
 
@@ -31,7 +41,7 @@ These work for **testing** but have real downsides for an oracle:
 - **Egress IP rotation** can trigger CEX API rate limits.
 - **No journald** — you lose the structured log pipeline you already have for BP ops.
 
-If you must use Railway for a quick test, run keosd as a sidecar process and unlock it at boot. Or fork the daemon to read a keyfile and sign with `@proton/js` (or eosjs) directly. That's a meaningful divergence from this repo's design — keep it on a branch, not main.
+If you must use Railway for a quick test, run keosd as a sidecar process and unlock it at boot. That's a meaningful divergence from this repo's design — keep it on a branch, not main.
 
 ## Sizing
 
