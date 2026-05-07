@@ -1,0 +1,19 @@
+{
+  "account": "yourbp",
+  "permission": "oracle",
+  "contract": "delphioracle",
+  "intervalSeconds": 60,
+  "endpoints": [
+    "https://proton.eosusa.io",
+    "https://proton.greymass.com"
+  ],
+  "pairs": [
+    {
+      "name": "xprusd",
+      "feeds": ["kucoin:XPR-USDT", "bitget:XPRUSDT", "binance:XPRUSDT"],
+      "quotedPrecision": 6,
+      "maxDeviationPct": 2.5,
+      "minSources": 2
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+[Unit]
+Description=XPR Network oracle price pusher
+Documentation=https://github.com/paulgnz/xpr-oracle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xpr-oracle
+Group=xpr-oracle
+WorkingDirectory=/opt/xpr-oracle
+Environment=XPR_ORACLE_CONFIG=/etc/xpr-oracle/config.json
+# Adjust node path if you use a version manager (nvm, fnm, etc.)
+ExecStart=/usr/bin/node /opt/xpr-oracle/dist/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# proton CLI keystore lives under the service user's $HOME — leave that writable
+ReadWritePaths=/var/lib/xpr-oracle
+
+[Install]
+WantedBy=multi-user.target
