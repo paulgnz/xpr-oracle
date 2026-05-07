@@ -189,8 +189,10 @@ step_prereqs() {
   [[ "$node_major" -ge 20 ]] || fail "node $node_major found, need ≥20"
   ok "node $(node --version)"
 
-  command -v cleos >/dev/null 2>&1 || fail "cleos not found in PATH (ships with nodeos / xpr.start)"
-  ok "cleos $(cleos --version 2>&1 | head -1 || echo present)"
+  if ! command -v cleos >/dev/null 2>&1; then
+    fail "cleos not found in PATH (ships with nodeos / xpr.start)"
+  fi
+  ok "cleos at $(command -v cleos)"
 
   if ! pgrep -x keosd >/dev/null 2>&1; then
     warn "keosd is not running. Start it with:  keosd --unlock-timeout 9999999 &"

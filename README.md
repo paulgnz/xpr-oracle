@@ -139,7 +139,16 @@ Pushing to both is straightforward (just add another `linkauth` and another cont
 - **[docs/LOCAL-NODE.md](docs/LOCAL-NODE.md)** — pointing the daemon at your nodeos.
 - **[docs/HOSTING.md](docs/HOSTING.md)** — API node vs producer node, sizing.
 - **[docs/FEEDS.md](docs/FEEDS.md)** — feed taxonomy, pair-feed compatibility, pegged-token guidance.
+- **[docs/CONSUMERS.md](docs/CONSUMERS.md)** — how dApps and contracts **read** the prices this daemon pushes (off-chain curl/JS, on-chain AssemblyScript/C++, freshness + best practices).
 - **[docs/GOVERNANCE.md](docs/GOVERNANCE.md)** — adding new pairs (the only on-chain governance step).
+
+## Upgrading
+
+```bash
+cd ~/xpr-oracle && ./bin/upgrade.sh
+```
+
+Handles `git pull` + `npm install` + `npm run build` + `systemctl restart` in one command. **Required** when source has changed: systemd's `ExecStart` runs the compiled `dist/index.js`, so `git pull` alone won't pick up source updates without a rebuild.
 
 ## Monitoring
 

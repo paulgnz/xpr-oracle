@@ -40,6 +40,11 @@ Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+# SyslogIdentifier makes `journalctl -t xpr-oracle` work as a fallback on
+# systems where `journalctl -u xpr-oracle.service` returns no entries (a
+# known systemd 245 / Ubuntu 20.04 cgroup-attribution quirk with hardened
+# units). On healthier systemd versions both `-u` and `-t` work.
+SyslogIdentifier=xpr-oracle
 
 # Hardening — note ProtectHome=read-only (not =true): the daemon runs as the
 # same user that runs claimrewards, and it needs to talk to that user's keosd

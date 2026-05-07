@@ -11,7 +11,8 @@
 import { readFileSync, utimesSync, openSync, closeSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Config, FeedSample, PairConfig } from "./types.js";
-import { fetchFeed } from "./feeds.js";
+import { fetchFeed, checkDeprecatedFeeds } from "./feeds.js";
+import { CircuitOpenError } from "./breaker.js";
 import { aggregate } from "./aggregate.js";
 import { buildQuote, pushQuotes, killActiveChild, type Quote } from "./push.js";
 import { preflight } from "./health.js";
@@ -97,8 +98,16 @@ async function gatherPair(pair: PairConfig): Promise<Quote | null> {
   const samples: FeedSample[] = [];
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i];
-    if (r.status === "fulfilled") samples.push(r.value);
-    else log.warn(`${pair.feeds[i]} failed: ${(r.reason as Error)?.message ?? r.reason}`);
+    if (r.status === "fulfilled") {
+      samples.push(r.value);
+    } else {
+      const err = r.reason as Error;
+      // Don't spam logs for circuit-broken feeds — they emit a single line
+      // when first tripped open, then are silent until the recheck window.
+      if (!(err instanceof CircuitOpenError)) {
+        log.warn(`${pair.feeds[i]} failed: ${err?.message ?? err}`);
+      }
+    }
   }
   if (samples.length === 0) {
     log.warn(`pair ${pair.name}: no feeds returned`);
@@ -187,6 +196,8 @@ async function main(): Promise<void> {
       `via ${cfg.endpoint} | pairs=[${cfg.pairs.map((p) => p.name).join(",")}] ` +
       `interval=${cfg.intervalSeconds}s${dryRun ? " (dry-run)" : ""}`,
   );
+  // One-time: warn if any deprecated feeds are referenced. Doesn't block startup.
+  checkDeprecatedFeeds(cfg.pairs.flatMap((p) => p.feeds));
 
   let stopping = false;
   let stopSignals = 0;

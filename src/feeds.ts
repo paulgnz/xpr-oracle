@@ -5,8 +5,44 @@
  */
 
 import type { FeedAdapter } from "./types.js";
+import {
+  newState,
+  isOpen,
+  recordSuccess,
+  recordFailure,
+  CircuitOpenError,
+  type BreakerState,
+} from "./breaker.js";
+import { log } from "./log.js";
 
 const TIMEOUT_MS = 5_000;
+
+// Per-feedId circuit breaker state. Persists across ticks for the daemon's
+// lifetime; reset on success.
+const _breakers = new Map<string, BreakerState>();
+
+/**
+ * Feeds removed in past releases. The daemon prints a one-time deprecation
+ * warning at startup if any are still in config — guides upgraders without
+ * mutating their config.json.
+ */
+const DEPRECATED_FEEDS: Record<string, string> = {
+  "bitget:XPRUSDT":
+    "removed in v0.1.2 — XPR was delisted from Bitget v2 spot (HTTP 400). Drop it from config.json.",
+  "coinbase:USDC-USD":
+    "removed in v0.1.2 — Coinbase Exchange doesn't trade USDC-USD as a spot pair (HTTP 404). Use bitstamp:USDCUSD or kraken:USDCUSD.",
+};
+
+/** Log a one-line warning per deprecated feed referenced by the operator's config. */
+export function checkDeprecatedFeeds(feedIds: Iterable<string>): void {
+  const seen = new Set<string>();
+  for (const id of feedIds) {
+    if (DEPRECATED_FEEDS[id] && !seen.has(id)) {
+      seen.add(id);
+      log.warn(`[deprecated] ${id} — ${DEPRECATED_FEEDS[id]}`);
+    }
+  }
+}
 
 async function fetchJson<T = unknown>(url: string): Promise<T> {
   const ctl = new AbortController();
@@ -187,5 +223,25 @@ export async function fetchFeed(feedId: string): Promise<number> {
     );
   }
   if (!symbol) throw new Error(`missing symbol in feedId: ${feedId}`);
-  return adapter(symbol);
+
+  // Circuit breaker: skip permanently-failing feeds for 1h after threshold.
+  const state = _breakers.get(feedId) ?? newState();
+  if (isOpen(state)) {
+    throw new CircuitOpenError(feedId, state.failures);
+  }
+
+  try {
+    const price = await adapter(symbol);
+    _breakers.set(feedId, recordSuccess(state));
+    return price;
+  } catch (e) {
+    const r = recordFailure(state);
+    _breakers.set(feedId, r.state);
+    if (r.justOpened) {
+      log.warn(
+        `[circuit-breaker] ${feedId} opened after ${r.state.failures} consecutive failures — silencing for 1h, will probe then`,
+      );
+    }
+    throw e;
+  }
 }
