@@ -40,18 +40,41 @@ You should see `oracle` listed under permissions, parented to `active`.
 
 ## 3. Link the permission to the action
 
-This is the part that makes it least-privilege. After linking, the `oracle` permission can sign `delphioracle::write` and **nothing else**.
+> **The link is mandatory, not optional.** Without it, the `oracle` permission can sign **nothing at all** — EOSIO contract actions default to requiring `<account>@active`, and a child permission can only satisfy actions that have been explicitly redirected to it via `linkauth`. Skipping this step leaves you with a daemon that fails every push with `missing authority of <account>/oracle`.
+
+After linking, the `oracle` permission can sign `delphioracle::write` and **nothing else**.
+
+### Via the proton CLI
 
 ```bash
 proton account:permission:link mybp delphioracle write oracle -p mybp@active
 ```
 
-Verify the link is in place:
+### Via Anchor / Bloks / WebAuth (raw action)
+
+If your `active` permission lives in a wallet that signs through an explorer, propose this `eosio::linkauth` action authorized by `mybp@active`:
+
+```json
+{
+  "account": "mybp",
+  "code":    "delphioracle",
+  "type":    "write",
+  "requirement": "oracle"
+}
+```
+
+### Verify the link is on-chain
+
+`proton account` and most explorers don't surface `linkauth` rows obviously. The reliable check is a direct query of the `eosio::permlink` table, scoped to your account:
 
 ```bash
-proton account mybp
-# Look for "linked_actions" under the oracle permission
+curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
+  -d '{"code":"eosio","scope":"mybp","table":"permlink","limit":50,"json":true}'
 ```
+
+You should see a row mapping `code: delphioracle`, `message_type: write`, `required_permission: oracle`. If that row doesn't exist, the link wasn't applied — fix it before going further or every push will fail.
+
+### Adding more linked actions later
 
 If you later want to push to additional contracts (e.g. the native `oracles` account, or a future xpr-native delphioracle replacement), add another link — don't broaden the permission:
 

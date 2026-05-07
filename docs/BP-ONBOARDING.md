@@ -38,7 +38,12 @@ proton key:add
 # paste the private key when prompted
 ```
 
-If using **Option A**, attach the matching public key as a new `oracle` permission (see [PERMISSIONS.md](PERMISSIONS.md)).
+If using **Option A**, do **both** of the following — see [PERMISSIONS.md](PERMISSIONS.md) for full commands:
+
+1. **Create the permission** — attach the public key as a new `oracle` permission parented to `active` (`updateauth`).
+2. **Link the action to it** — point `delphioracle::write` at the new permission via `linkauth`.
+
+Without step 2 the permission can sign nothing — EOSIO actions default to requiring `<account>@active`, so an unlinked child permission is non-functional and every push will fail with `missing authority of <account>/oracle`.
 
 ---
 
@@ -160,6 +165,15 @@ Watch the first few cycles. You should see `push ok: <txid>` lines. Look the txi
 ---
 
 ## 7. Production install (systemd)
+
+> **Before `systemctl enable --now`, confirm the `linkauth` row is on-chain.** If `delphioracle::write` isn't linked to your `oracle` permission, the daemon will start cleanly and then fail every push with `missing authority`. Verify:
+>
+> ```bash
+> curl -s https://proton.eosusa.io/v1/chain/get_table_rows \
+>   -d '{"code":"eosio","scope":"<ACCOUNT>","table":"permlink","limit":50,"json":true}'
+> ```
+>
+> Look for a row with `code: delphioracle`, `message_type: write`, `required_permission: oracle`. No row → see [PERMISSIONS.md](PERMISSIONS.md) §3.
 
 ```bash
 # system user, no shell
