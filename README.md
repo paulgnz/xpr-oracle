@@ -113,9 +113,11 @@ Replace <MY-BP> with my BP account name. Don't push to mainnet during dry-run. I
 | Pair | Status | Notes |
 |---|---|---|
 | `xprusd` | ✅ active, precision 6 | The only registered pair as of 2026-05-07. |
-| `xbtcusd`, `xethusd`, `xusdcusd`, `xmdusd` | ⏳ requested for Atomic Drops | Need pair registration via `newbounty`/`editbounty` — see [docs/GOVERNANCE.md](docs/GOVERNANCE.md). |
+| `btcusd`, `ethusd`, `usdcusd`, `xmdusd` | ⏳ requested for Atomic Drops | Need pair registration via `newbounty` — see [docs/GOVERNANCE.md](docs/GOVERNANCE.md). |
 
-For pegged tokens (`xbtcusd`, `xethusd`, `xusdcusd`, `xmdusd`), the on-chain pair name is `x<asset>usd` but the *feed* uses the underlying asset's CEX symbol (e.g., `xbtcusd` is fed from `kucoin:BTC-USDT`, not from any XPR-side market). See [docs/FEEDS.md](docs/FEEDS.md).
+**Naming convention.** Pair names follow Metallicus's existing `oracles` convention: price the **underlying asset**, not the XPR-side wrapper. So `btcusd` (the price of BTC), not `xbtcusd` (the price of XBTC-the-wrapper). Same data is fed from CEX BTC markets either way, but `btcusd` is the standard name the rest of the ecosystem uses.
+
+The exception is `xmdusd`: XMD is XPR-native via `xmd.token`, has no off-chain reference market, and behaves like `xprusd` — keep the X prefix. See [docs/FEEDS.md](docs/FEEDS.md) for the per-pair feed table.
 
 ## Sibling: Metallicus `oracles` contract
 

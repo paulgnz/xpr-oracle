@@ -35,19 +35,21 @@ Aggregators (CoinGecko, CoinMarketCap, CryptoCompare) publish a volume-weighted 
 - **CoinMarketCap.** Free tier requires an API key and caps at 333 calls/day, which is too tight for a 60s tick (1440 calls/day). Add it if you have a paid plan and value the redundancy.
 - **CryptoCompare.** Significant overlap with CoinGecko on free tier; not enough additional independence to justify the second adapter.
 
-## 3. Pegged-token and derivative pairs
+## 3. Pair-name convention and pegged tokens
 
-XPR has several pegged tokens (XMD ≈ USD, XUSDC ≈ USDC, XBTC ≈ BTC, XETH ≈ ETH, XDOGE ≈ DOGE, etc.). The on-chain pair `xbtcusd` is asking for **the price of BTC**, not the price of XBTC-the-XPR-token: Atomic Drops and Atomic Assets consumers use it to convert "drop priced at $25" into "X XBTC needed today." Use the underlying CEX symbol:
+XPR has several pegged tokens (XBTC ≈ BTC, XETH ≈ ETH, XUSDC ≈ USDC, etc.). The on-chain pair `btcusd` is asking for **the price of BTC**, not the price of XBTC-the-XPR-wrapper: Atomic Drops and Atomic Assets consumers use it to convert "drop priced at $25" into "X XBTC needed today" — and any 0.01-magnitude peg deviation is handled at the wrapper-token level by arbitrageurs, not by the oracle. This matches Metallicus's existing `oracles` contract, which uses `BTC/USD`, `ETH/USD`, `USDC/USD` (no `X`-prefix wrapper variants anywhere).
 
-| XPR pair | Use feeds for | Example feed list |
+The exception is `xmdusd`: XMD is XPR-native via `xmd.token`, has no off-chain reference market, and behaves the same as `xprusd` — both are XPR-only assets, so they keep the X prefix.
+
+| Pair | Underlying | Example feed list |
 |---|---|---|
-| `xprusd` | XPR | `kucoin:XPR-USDT`, `bitget:XPRUSDT`, `mexc:XPRUSDT`, `gate:XPR_USDT`, `coingecko:proton` |
-| `xbtcusd` | BTC | `kucoin:BTC-USDT`, `coinbase:BTC-USD`, `kraken:XBTUSD`, `bitget:BTCUSDT`, `coingecko:bitcoin` |
-| `xethusd` | ETH | `kucoin:ETH-USDT`, `coinbase:ETH-USD`, `kraken:ETHUSD`, `bitget:ETHUSDT`, `coingecko:ethereum` |
-| `xusdcusd` | USDC | `coinbase:USDC-USD`, `kraken:USDCUSD`, `coingecko:usd-coin` (≈1 — you're pricing the peg, not the wrapper) |
-| `xmdusd` | USD reference | `coinbase:USDC-USD`, `kraken:USDTUSD`, `coingecko:tether` (effectively reports ~1.0 unless USDT/USDC depeg) |
+| `xprusd` | XPR (XPR-native) | `kucoin:XPR-USDT`, `bitget:XPRUSDT`, `mexc:XPRUSDT`, `gate:XPR_USDT`, `coingecko:proton` |
+| `btcusd` | BTC | `kucoin:BTC-USDT`, `coinbase:BTC-USD`, `kraken:XBTUSD`, `bitget:BTCUSDT`, `coingecko:bitcoin` |
+| `ethusd` | ETH | `kucoin:ETH-USDT`, `coinbase:ETH-USD`, `kraken:ETHUSD`, `bitget:ETHUSDT`, `coingecko:ethereum` |
+| `usdcusd` | USDC (≈1) | `coinbase:USDC-USD`, `kraken:USDCUSD`, `coingecko:usd-coin` |
+| `xmdusd` | USD reference (XPR-native peg) | `coinbase:USDC-USD`, `kraken:USDTUSD`, `coingecko:tether` (effectively ≈1.0 unless USDT/USDC depeg) |
 
-The pair name encodes "the underlying asset's USD price," not "the wrapped token's price relative to USD." Don't try to source `xbtcusd` from a thinly-traded XPR-side AMM — it's circular and gameable.
+Don't try to source `btcusd` from a thinly-traded XPR-side AMM holding XBTC — it's circular and gameable. Source from the deepest CEX BTC/USDT or BTC/USD markets; the wrapper's peg risk is downstream from this pricing.
 
 The same compatibility map is hardcoded into `install.sh` so the interactive picker shows you only feeds that actually trade the right asset for each pair you select.
 

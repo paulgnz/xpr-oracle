@@ -29,52 +29,37 @@ In practice nobody has used path 2 since the contract was deployed in Feb 2025. 
 
 The standard DelphiOracle pair-creation flow is two actions: `newbounty` proposes the name, `editbounty` fills in the fields.
 
-### Example: `xbtcusd` (XBTC priced in USD, fed from BTC CEX symbols)
+### Convention: price the underlying asset, not the wrapper
 
-**Action 1 — `delphioracle::newbounty`:**
+Use `btcusd`, `ethusd`, `usdcusd` — not `btcusd`, `xethusd`, `xusdcusd`. Reasons:
 
-```json
-{
-  "name": "xbtcusd",
-  "proposer": "saltant"
-}
-```
+1. Matches Metallicus's existing `oracles` contract (22 feeds, all named after the underlying — no `X`-prefix wrappers).
+2. Real liquidity is in the underlying asset's CEX markets; the XPR-side wrapper has near-zero standalone liquidity, so a `btcusd` pair would be fed from BTC sources anyway and the X-prefix would be a fiction.
+3. Consumers across the ecosystem can reuse `btcusd`; only Atomic Drops would read `btcusd`.
 
-**Action 2 — `delphioracle::editbounty`:**
+Keep the `x` prefix only for assets that are XPR-native and have no off-chain reference: `xprusd`, `xmdusd`.
 
-```json
-{
-  "name": "xbtcusd",
-  "base_symbol": "8,XBTC",
-  "base_type": 4,
-  "base_contract": "xtokens",
-  "quote_symbol": "2,USD",
-  "quote_type": 1,
-  "quote_contract": "",
-  "quoted_precision": 4
-}
-```
+### Example: `btcusd` (single newbounty action)
 
-`base_type` and `quote_type` are enums in the contract's `asset_type` definition; `4` = a fungible token, `1` = a fiat reference. Match the convention used for the existing `xprusd` pair.
-
-### Example: `btcusd` (BTC/USD reference, no XPR-side wrapper)
-
-```json
-{ "name": "btcusd", "proposer": "saltant" }
-```
+The `newbounty` action takes `{proposer: name, pair: pairinput}` — the full pair shape is embedded in one action.
 
 ```json
 {
-  "name": "btcusd",
-  "base_symbol": "8,BTC",
-  "base_type": 4,
-  "base_contract": "",
-  "quote_symbol": "2,USD",
-  "quote_type": 1,
-  "quote_contract": "",
-  "quoted_precision": 4
+  "proposer": "saltant",
+  "pair": {
+    "name": "btcusd",
+    "base_symbol": "8,BTC",
+    "base_type": 2,
+    "base_contract": "",
+    "quote_symbol": "2,USD",
+    "quote_type": 1,
+    "quote_contract": "",
+    "quoted_precision": 4
+  }
 }
 ```
+
+`base_type` and `quote_type` are enums in the contract's `asset_type` definition: `1` = fiat, `2` = cryptocurrency reference (no on-chain token), `4` = eosio_token (has a contract). For BTC/ETH/USDC priced as universal references, use `2`. For `xprusd` (and `xmdusd`), use `4` because those tokens exist on-chain with a contract — match the shape of the existing `xprusd` pair.
 
 ## How to actually propose
 
@@ -123,20 +108,20 @@ cat > /tmp/addpair.json <<'EOF'
       "account": "delphioracle",
       "name": "newbounty",
       "authorization": [{"actor":"eosio.prods","permission":"active"}],
-      "data": {"name":"xbtcusd","proposer":"saltant"}
+      "data": {"name":"btcusd","proposer":"saltant"}
     }
   ],
   "transaction_extensions": []
 }
 EOF
 
-cleos --url http://127.0.0.1:8888 multisig propose_trx addxbtcusd \
+cleos --url http://127.0.0.1:8888 multisig propose_trx addbtcusd \
   '[{"actor":"eosio.prods","permission":"active"}]' \
   /tmp/addpair.json \
   <proposer-bp>
 ```
 
-15+ BPs approve via `cleos multisig approve <proposer-bp> addxbtcusd '{"actor":"<their-bp>","permission":"active"}' -p <their-bp>@active`. Then anyone executes via `cleos multisig exec <proposer-bp> addxbtcusd <executor> -p <executor>@active`.
+15+ BPs approve via `cleos multisig approve <proposer-bp> addbtcusd '{"actor":"<their-bp>","permission":"active"}' -p <their-bp>@active`. Then anyone executes via `cleos multisig exec <proposer-bp> addbtcusd <executor> -p <executor>@active`.
 
 ## Verifying current state
 

@@ -40,16 +40,16 @@ readonly XPR_CHAIN_ID="384da888112027f0321850a169f737c33e53b388aad48b5adace4bab9
 # Pair → eligible feed list. Keep this in sync with docs/FEEDS.md.
 declare -A PAIR_FEEDS
 PAIR_FEEDS[xprusd]="kucoin:XPR-USDT bitget:XPRUSDT mexc:XPRUSDT gate:XPR_USDT coingecko:proton"
-PAIR_FEEDS[xbtcusd]="kucoin:BTC-USDT bitget:BTCUSDT mexc:BTCUSDT gate:BTC_USDT coinbase:BTC-USD kraken:XBTUSD bitfinex:tBTCUSD okx:BTC-USDT bybit:BTCUSDT coingecko:bitcoin"
-PAIR_FEEDS[xethusd]="kucoin:ETH-USDT bitget:ETHUSDT mexc:ETHUSDT gate:ETH_USDT coinbase:ETH-USD kraken:ETHUSD bitfinex:tETHUSD okx:ETH-USDT bybit:ETHUSDT coingecko:ethereum"
-PAIR_FEEDS[xusdcusd]="coinbase:USDC-USD kraken:USDCUSD coingecko:usd-coin"
+PAIR_FEEDS[btcusd]="kucoin:BTC-USDT bitget:BTCUSDT mexc:BTCUSDT gate:BTC_USDT coinbase:BTC-USD kraken:XBTUSD bitfinex:tBTCUSD okx:BTC-USDT bybit:BTCUSDT coingecko:bitcoin"
+PAIR_FEEDS[ethusd]="kucoin:ETH-USDT bitget:ETHUSDT mexc:ETHUSDT gate:ETH_USDT coinbase:ETH-USD kraken:ETHUSD bitfinex:tETHUSD okx:ETH-USDT bybit:ETHUSDT coingecko:ethereum"
+PAIR_FEEDS[usdcusd]="coinbase:USDC-USD kraken:USDCUSD coingecko:usd-coin"
 PAIR_FEEDS[xmdusd]="coinbase:USDC-USD kraken:USDTUSD coingecko:tether"
 
 declare -A PAIR_PRECISION
 PAIR_PRECISION[xprusd]=6
-PAIR_PRECISION[xbtcusd]=4
-PAIR_PRECISION[xethusd]=4
-PAIR_PRECISION[xusdcusd]=6
+PAIR_PRECISION[btcusd]=4
+PAIR_PRECISION[ethusd]=4
+PAIR_PRECISION[usdcusd]=6
 PAIR_PRECISION[xmdusd]=6
 
 # Defaults. Override via flag or env var.
@@ -311,17 +311,17 @@ collect_inputs() {
       echo
       echo "Available pairs (currently registered on delphioracle: only xprusd):"
       echo "  1) xprusd    — XPR/USD               $(c_dim '(active on-chain)')"
-      echo "  2) xbtcusd   — BTC/USD               $(c_dim '(not yet registered)')"
-      echo "  3) xethusd   — ETH/USD               $(c_dim '(not yet registered)')"
-      echo "  4) xusdcusd  — USDC/USD              $(c_dim '(not yet registered)')"
+      echo "  2) btcusd    — BTC/USD               $(c_dim '(not yet registered)')"
+      echo "  3) ethusd    — ETH/USD               $(c_dim '(not yet registered)')"
+      echo "  4) usdcusd   — USDC/USD              $(c_dim '(not yet registered)')"
       echo "  5) xmdusd    — XMD/USD (peg target)  $(c_dim '(not yet registered)')"
       echo "Enter comma-separated numbers or pair names (default: 1):"
       local raw
       raw=$(prompt "Pairs" "1")
       PAIRS_CSV=$(echo "$raw" \
         | tr ',' '\n' | tr -d ' ' \
-        | sed -e 's/^1$/xprusd/' -e 's/^2$/xbtcusd/' -e 's/^3$/xethusd/' \
-              -e 's/^4$/xusdcusd/' -e 's/^5$/xmdusd/' \
+        | sed -e 's/^1$/xprusd/' -e 's/^2$/btcusd/' -e 's/^3$/ethusd/' \
+              -e 's/^4$/usdcusd/' -e 's/^5$/xmdusd/' \
         | paste -sd ',' -)
     else
       PAIRS_CSV="xprusd"
@@ -347,11 +347,11 @@ select_feeds_for_pair() {
   local available=(${PAIR_FEEDS[$pair]})
   local selected_default
   case "$pair" in
-    xprusd)   selected_default="kucoin:XPR-USDT,bitget:XPRUSDT,mexc:XPRUSDT,gate:XPR_USDT,coingecko:proton" ;;
-    xbtcusd)  selected_default="kucoin:BTC-USDT,coinbase:BTC-USD,kraken:XBTUSD,bitget:BTCUSDT,coingecko:bitcoin" ;;
-    xethusd)  selected_default="kucoin:ETH-USDT,coinbase:ETH-USD,kraken:ETHUSD,bitget:ETHUSDT,coingecko:ethereum" ;;
-    xusdcusd) selected_default="coinbase:USDC-USD,kraken:USDCUSD,coingecko:usd-coin" ;;
-    xmdusd)   selected_default="coinbase:USDC-USD,kraken:USDTUSD,coingecko:tether" ;;
+    xprusd)  selected_default="kucoin:XPR-USDT,bitget:XPRUSDT,mexc:XPRUSDT,gate:XPR_USDT,coingecko:proton" ;;
+    btcusd)  selected_default="kucoin:BTC-USDT,coinbase:BTC-USD,kraken:XBTUSD,bitget:BTCUSDT,coingecko:bitcoin" ;;
+    ethusd)  selected_default="kucoin:ETH-USDT,coinbase:ETH-USD,kraken:ETHUSD,bitget:ETHUSDT,coingecko:ethereum" ;;
+    usdcusd) selected_default="coinbase:USDC-USD,kraken:USDCUSD,coingecko:usd-coin" ;;
+    xmdusd)  selected_default="coinbase:USDC-USD,kraken:USDTUSD,coingecko:tether" ;;
   esac
 
   if ! is_interactive; then
