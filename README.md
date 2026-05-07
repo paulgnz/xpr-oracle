@@ -4,11 +4,11 @@ A minimal, copy-pasteable price-pusher for **XPR Network Block Producers**. Fetc
 
 ## Why this matters now
 
-On 2026-05-07, **Rob @AtomicHub** asked all active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly. Until today, only `saltant` was pushing, hourly — meaning the on-chain median was effectively single-sourced.
+On 2026-05-07, **AtomicHub** asked active XPR Network BPs in the BP Telegram channel to start running a `delphioracle` pusher. **Atomic Drops uses delphioracle to peg drops to a stable USD price**, and the **Atomic Assets API** depends on it directly. Until today, only `saltant` was pushing, hourly — meaning the on-chain median was effectively single-sourced.
 
 This repo is the daemon that fixes that.
 
-We **proved the contract has no governance gate for being an oracle** by bootstrapping `protonnz` end-to-end in this repo's first session. First-time push: tx [`b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800), block 380898553, 2026-05-07 06:48:06 UTC. The on-chain `xprusd` median jumped from single-sourced (`saltant=2850`) to dual-sourced (`median=2887` blending saltant + protonnz). **Any BP can self-bootstrap** — no whitelist request, no multisig, no saltant approval.
+We bootstrapped `protonnz` end-to-end in this repo's first session and verified the daemon works against live mainnet. First push: tx [`b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800), block 380898553, 2026-05-07 06:48:06 UTC. The on-chain `xprusd` median moved from single-sourced (`saltant=2850`) to dual-sourced (`median=2887` blending both pushers). The contract's only on-chain prerequisite is a properly configured `linkauth` from your BP to `delphioracle::write` — once that's in place, you can push.
 
 ## What it does
 
@@ -95,7 +95,7 @@ If you want your local AI agent (Claude Code, Cursor, etc.) to perform the insta
 | Pair | Status | Notes |
 |---|---|---|
 | `xprusd` | ✅ active, precision 6 | The only registered pair as of 2026-05-07. |
-| `xbtcusd`, `xethusd`, `xusdcusd`, `xmdusd` | ⏳ requested by Rob @AtomicHub | Need pair registration via `newbounty`/`editbounty` — see [docs/GOVERNANCE.md](docs/GOVERNANCE.md). |
+| `xbtcusd`, `xethusd`, `xusdcusd`, `xmdusd` | ⏳ requested for Atomic Drops | Need pair registration via `newbounty`/`editbounty` — see [docs/GOVERNANCE.md](docs/GOVERNANCE.md). |
 
 For pegged tokens (`xbtcusd`, `xethusd`, `xusdcusd`, `xmdusd`), the on-chain pair name is `x<asset>usd` but the *feed* uses the underlying asset's CEX symbol (e.g., `xbtcusd` is fed from `kucoin:BTC-USDT`, not from any XPR-side market). See [docs/FEEDS.md](docs/FEEDS.md).
 

@@ -1,6 +1,6 @@
 # BP Onboarding
 
-End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network. **No whitelist, no multisig, no saltant approval needed** — verified empirically when `protonnz` self-bootstrapped on 2026-05-07. The daemon's authority is exclusively the BP's own permission and linkauth.
+End-to-end setup for a Block Producer who wants to start providing oracle data on XPR Network. Onboarding is **self-service** — verified empirically when `protonnz` bootstrapped end-to-end on 2026-05-07. The daemon's authority is exclusively the BP's own permission and linkauth.
 
 > Prereqs: `cleos` and `keosd` are available on the host (they ship with nodeos and are running for any BP using the standard [`xpr.start`](https://github.com/XPRNetwork/xpr.start) stack). The daemon talks to whatever URL you set as `endpoint` in `config.json`. Run on your **API node**, not your producer node — see [HOSTING.md](HOSTING.md).
 >
@@ -49,7 +49,7 @@ Expected: `[ { "account": "delphioracle", "action": "write" } ]`. **If this is e
 
 ## 3. Register yourself with `delphioracle::reguser` (1 transaction, 30 seconds)
 
-There's **no whitelist request, no multisig, no saltant approval** — verified empirically when `protonnz` self-bootstrapped on 2026-05-07 ([tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)). The contract's `write` action only checks the on-chain `linkauth` from §2. Once that's in place, you're good.
+The contract's `write` action checks the on-chain `linkauth` from §2 — once that's in place, you can push (verified empirically by `protonnz` on 2026-05-07, [tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)).
 
 You should still call `reguser` once to put yourself in the `users` table cleanly. It's free, takes one transaction, and you sign it with your **own** active key.
 

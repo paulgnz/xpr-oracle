@@ -26,8 +26,8 @@ by Atomic Drops, the Atomic Assets API, and any other contract reading
 2. **Wallet password via stdin, never argv.** `cleos wallet unlock --password $PW` would put the password in `/proc/<pid>/cmdline`. We pipe via stdin — invisible to `ps -ef`.
 3. **Permanent-error backoff.** A not-yet-whitelisted BP would otherwise hammer the chain with `missing authority` every interval. Permanent errors trigger 60s → 120s → ... → 30min exponential backoff. Transient errors (timeouts, 5xx, ECONNREFUSED) keep normal cadence.
 4. **Stale-nodeos preflight.** `get_info` head_block_time freshness check before each push prevents pre-expired transactions when the local node is lagging.
-5. **No on-chain governance gate for being an oracle.** Verified empirically on 2026-05-07 — a BP with `linkauth` to `delphioracle::write` can push successfully on first call. The contract auto-registers users. No saltant approval, no BP multisig, no producer table to be added to. Onboarding is purely a BP-side permission setup.
-6. **Pair registration IS governance.** Adding a new pair (e.g. `btcusd`) goes through `newbounty` / `editbounty` and requires saltant's auth (he holds delphioracle@active threshold-1) or BP multisig (`eosio.prods@active` is also in the threshold).
+5. **Self-service oracle onboarding.** Verified empirically on 2026-05-07 — a BP with `linkauth` to `delphioracle::write` can push successfully on first call; the contract auto-registers users. Onboarding is purely a BP-side permission setup.
+6. **Pair registration goes through the contract maintainer.** Adding a new pair (e.g. `btcusd`) goes through `newbounty` / `editbounty`. Saltant maintains `delphioracle` and holds the contract's active key; he can register a new pair in one transaction. `eosio.prods@active` (BP multisig) is also valid for the same actions if needed.
 
 ## Layout
 

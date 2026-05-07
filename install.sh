@@ -277,7 +277,7 @@ collect_inputs() {
   [[ "$INTERVAL" =~ ^[0-9]+$ ]] || fail "interval must be a positive integer"
   [[ "$INTERVAL" -ge 60 && "$INTERVAL" -le 3600 ]] || fail "interval must be 60..3600"
   if is_interactive && [[ -z "$PAIRS_CSV" ]]; then
-    INTERVAL=$(prompt "Push interval seconds (Rob @AtomicHub recommended 300)" "$INTERVAL")
+    INTERVAL=$(prompt "Push interval seconds (community-recommended cadence: 300)" "$INTERVAL")
     [[ "$INTERVAL" =~ ^[0-9]+$ ]] || fail "interval must be a positive integer"
   fi
 
@@ -287,10 +287,10 @@ collect_inputs() {
       echo
       echo "Available pairs (currently registered on delphioracle: only xprusd):"
       echo "  1) xprusd    — XPR/USD               $(c_dim '(active on-chain)')"
-      echo "  2) xbtcusd   — BTC/USD               $(c_dim '(needs saltant approval)')"
-      echo "  3) xethusd   — ETH/USD               $(c_dim '(needs saltant approval)')"
-      echo "  4) xusdcusd  — USDC/USD              $(c_dim '(needs saltant approval)')"
-      echo "  5) xmdusd    — XMD/USD (peg target)  $(c_dim '(needs saltant approval)')"
+      echo "  2) xbtcusd   — BTC/USD               $(c_dim '(not yet registered)')"
+      echo "  3) xethusd   — ETH/USD               $(c_dim '(not yet registered)')"
+      echo "  4) xusdcusd  — USDC/USD              $(c_dim '(not yet registered)')"
+      echo "  5) xmdusd    — XMD/USD (peg target)  $(c_dim '(not yet registered)')"
       echo "Enter comma-separated numbers or pair names (default: 1):"
       local raw
       raw=$(prompt "Pairs" "1")

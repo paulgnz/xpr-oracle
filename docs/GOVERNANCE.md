@@ -1,8 +1,8 @@
 # Governance: pair creation on `delphioracle`
 
-**Onboarding as an oracle is not a governance step.** Verified empirically on 2026-05-07 ([tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)) — a BP with `linkauth` to `delphioracle::write` can push immediately, no whitelist, no multisig, no saltant approval. See [BP-ONBOARDING.md](BP-ONBOARDING.md) §3.
+**Onboarding as an oracle is self-service.** A BP with `linkauth` to `delphioracle::write` can push immediately — verified empirically on 2026-05-07 ([tx `b2df4931…`](https://explorer.xprnetwork.org/transaction/b2df49313fab7d09e14497dc4d33e9791b5e57cb0764a86d8ed9a58d99ceb800)). See [BP-ONBOARDING.md](BP-ONBOARDING.md) §3.
 
-The only on-chain governance step that *does* still apply is **adding a new pair** to the contract's pair set. Until a pair is registered, pushes naming it fail. As of 2026-05-07 only `xprusd` is registered.
+The on-chain governance step that *does* still apply is **adding a new pair** to the contract's pair set. Until a pair is registered, pushes naming it fail. As of 2026-05-07 only `xprusd` is registered.
 
 This doc shows how to propose a new pair.
 
