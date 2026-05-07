@@ -31,6 +31,16 @@ We bootstrapped `protonnz` end-to-end in this repo's first session and verified 
 
 Zero runtime npm dependencies. Mirrors the `claimrewards` cron pattern most BPs already have wired up — no new key-management story.
 
+## One-time on-chain setup (oracle permission + linkauth)
+
+Two transactions signed by `<bp>@active`, ~45 seconds apart. Generate a fresh keypair on the pusher host (`cleos create key --to-console`), then:
+
+**Anchor / Bloks / WebAuth (most BPs):** open https://explorer.xprnetwork.org/account/eosio → **Contract** → **Actions**. Run **`updateauth`** (`account=<bp>`, `permission=oracle`, `parent=active`, `auth={threshold:1, keys:[{key:PUB_K1_…, weight:1}]}`), then **`linkauth`** (`account=<bp>`, `code=delphioracle`, `type=write`, `requirement=oracle`).
+
+**cleos** (if `<bp>@active` is in your local keosd): `cleos set account permission <bp> oracle PUB_K1_… active -p <bp>@active`, then `cleos set action permission <bp> delphioracle write oracle -p <bp>@active`.
+
+Verify, recovery, threat model, and the worked `protonnz` example are in [docs/PERMISSIONS.md](docs/PERMISSIONS.md). **`install.sh` does not perform this step — it verifies the result and refuses to install if linkauth is missing.**
+
 ## Quickstart (interactive)
 
 Prereqs: Node ≥20, `cleos` and `keosd` (already on every BP/API node from [`xpr.start`](https://github.com/XPRNetwork/xpr.start)), `jq`, `curl`. Recommended: run on your **API node**, not your producer node — see [docs/HOSTING.md](docs/HOSTING.md).

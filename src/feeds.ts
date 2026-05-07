@@ -113,6 +113,36 @@ const adapters: Record<string, FeedAdapter> = {
   },
 
   /**
+   * CoinMarketCap — aggregator. Symbol is the CMC ticker (e.g. "XPR", "BTC").
+   * Requires a CMC API key in `CMC_API_KEY` env var (free Basic plan is fine
+   * at 5-min cadence with a single pair: ~288 req/day vs ~333/day quota).
+   * Adapter throws if the key isn't set so misconfiguration fails fast.
+   * Same correlation caveat as CoinGecko applies.
+   */
+  coinmarketcap: async (symbol) => {
+    const key = process.env.CMC_API_KEY;
+    if (!key) throw new Error(`coinmarketcap:${symbol}: CMC_API_KEY env var not set`);
+    const url = `https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol=${symbol}&convert=USD`;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        signal: ctl.signal,
+        headers: { "X-CMC_PRO_API_KEY": key, "Accept": "application/json" },
+      });
+      if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
+      const j = (await res.json()) as {
+        data?: Record<string, Array<{ quote?: { USD?: { price?: number } } }>>;
+      };
+      const arr = j?.data?.[symbol];
+      const price = arr?.[0]?.quote?.USD?.price;
+      return num(price, `coinmarketcap:${symbol}`);
+    } finally {
+      clearTimeout(t);
+    }
+  },
+
+  /**
    * CoinGecko — aggregator. Symbol is the CoinGecko `id` slug
    * (e.g. "proton", "bitcoin", "ethereum"), priced against USD.
    *

@@ -64,6 +64,7 @@ INSTALL_SYSTEMD=""
 NON_INTERACTIVE="${XPR_ORACLE_NONINTERACTIVE:-}"
 SKIP_BUILD=""
 SKIP_CHAIN_CHECKS=""
+ORACLE_PRIVATE_KEY_FILE=""
 
 #─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -138,6 +139,9 @@ FLAGS
   --non-interactive              Skip all prompts (also: XPR_ORACLE_NONINTERACTIVE=1)
   --skip-build                   Skip 'npm install' and 'npm run build'
   --skip-chain-checks            Skip on-chain verification of account/permission/linkauth
+  --oracle-private-key-file=<p>  Path to a file containing the oracle private key.
+                                 Imported into keosd before pushing. In interactive
+                                 mode, prompts for the key if not provided.
   -h, --help                     This message
 
 ENV
@@ -158,6 +162,7 @@ while [[ $# -gt 0 ]]; do
     --non-interactive)         NON_INTERACTIVE=1; shift ;;
     --skip-build)              SKIP_BUILD=1; shift ;;
     --skip-chain-checks)       SKIP_CHAIN_CHECKS=1; shift ;;
+    --oracle-private-key-file=*) ORACLE_PRIVATE_KEY_FILE="${1#*=}"; shift ;;
     -h|--help)                 usage; exit 0 ;;
     *) fail "unknown flag: $1 (--help for usage)" ;;
   esac
@@ -365,7 +370,7 @@ chain_check() {
     || { warn "could not fetch account $ACCOUNT (endpoint reachable?)"; return; }
   ok "account $ACCOUNT exists"
 
-  # 2. Permission exists with linked_actions on delphioracle::write
+  # 2. Permission exists with linked_actions on delphioracle::write — REQUIRED.
   local linked
   linked=$(echo "$acct" | jq -r --arg p "$PERMISSION" \
     '.permissions[] | select(.perm_name==$p) | .linked_actions[] | select(.account=="delphioracle" and .action=="write") | .action' \
@@ -373,9 +378,20 @@ chain_check() {
   if [[ -n "$linked" ]]; then
     ok "linkauth: ${ACCOUNT}@${PERMISSION} → delphioracle::write"
   else
-    warn "linkauth missing: ${ACCOUNT}@${PERMISSION} → delphioracle::write"
-    warn "   Set with: cleos --url $ENDPOINT set action permission $ACCOUNT delphioracle write $PERMISSION -p $ACCOUNT@active"
-    warn "   See docs/PERMISSIONS.md for the full setup."
+    echo
+    fail "linkauth missing: ${ACCOUNT}@${PERMISSION} → delphioracle::write is NOT on chain.
+
+The daemon would install successfully and then fail every push with
+'missing authority of ${ACCOUNT}/${PERMISSION}'. Set up the permission
+first — see README.md '#One-time on-chain setup' or docs/PERMISSIONS.md.
+
+If you've already done it in a wallet UI, the transaction may not have
+landed yet — wait ~30s and re-run, or run with --skip-chain-checks to
+bypass (NOT recommended; you'll have a broken daemon).
+
+Quick on-chain verify command:
+  curl -s ${ENDPOINT}/v1/chain/get_account -d '{\"account_name\":\"${ACCOUNT}\"}' \\
+    | jq '.permissions[] | select(.perm_name==\"${PERMISSION}\") | .linked_actions'"
   fi
 
   # 3. delphioracle.users membership — informational only.
@@ -404,6 +420,77 @@ chain_check() {
       warn "   Ping saltant on the BP Telegram with: \"please add $p to delphioracle\""
     fi
   done
+}
+
+#─────────────────────────────────────────────────────────────────────────────
+# Step 5b: import oracle private key into keosd (if not already there)
+#─────────────────────────────────────────────────────────────────────────────
+
+import_oracle_key() {
+  # Inspect the keosd wallet for the oracle public key (read from get_account).
+  local oracle_pub
+  oracle_pub=$(curl -fsS --max-time 5 "$ENDPOINT/v1/chain/get_account" \
+    -d "{\"account_name\":\"$ACCOUNT\"}" 2>/dev/null \
+    | jq -r --arg p "$PERMISSION" \
+        '.permissions[] | select(.perm_name==$p) | .required_auth.keys[0].key' 2>/dev/null)
+
+  if [[ -z "$oracle_pub" || "$oracle_pub" == "null" ]]; then
+    warn "could not determine the oracle public key from chain — skipping keosd import check"
+    return
+  fi
+
+  # Is the key already in keosd?
+  if cleos --url "$ENDPOINT" wallet keys 2>/dev/null | grep -qF "$oracle_pub"; then
+    ok "oracle public key already imported in keosd: ${oracle_pub:0:24}…"
+    return
+  fi
+
+  info "oracle public key (${oracle_pub:0:24}…) is NOT in keosd"
+
+  # Source the private key from --oracle-private-key-file or interactive prompt.
+  local privkey=""
+  if [[ -n "$ORACLE_PRIVATE_KEY_FILE" ]]; then
+    [[ -f "$ORACLE_PRIVATE_KEY_FILE" ]] || fail "oracle private key file not found: $ORACLE_PRIVATE_KEY_FILE"
+    privkey=$(tr -d '[:space:]' < "$ORACLE_PRIVATE_KEY_FILE")
+  elif is_interactive; then
+    if prompt_yes_no "Import the oracle private key into keosd now?" "y"; then
+      echo "Paste the oracle private key (PVT_K1_… or 5… legacy WIF). It is read into a temp file with chmod 600 and removed after import:"
+      read -r -s privkey
+      echo
+    else
+      warn "skipping keosd import — the daemon will fail with 'unknown key' until you run: cleos --url $ENDPOINT wallet import"
+      return
+    fi
+  else
+    fail "oracle key not in keosd and no --oracle-private-key-file provided in non-interactive mode.
+Either run 'cleos --url $ENDPOINT wallet import' yourself before retrying, or pass --oracle-private-key-file=<path>."
+  fi
+
+  [[ -n "$privkey" ]] || fail "no private key provided"
+
+  # Sanity-check the format
+  case "$privkey" in
+    PVT_K1_*|5[A-Za-z0-9][A-Za-z0-9]*) ;;
+    *) fail "private key does not look like a WIF (expected 'PVT_K1_…' or legacy '5…' format)" ;;
+  esac
+
+  # Pipe to cleos via a tmp file (visible to the user briefly; chmod 600).
+  local tmp; tmp=$(mktemp); chmod 600 "$tmp"
+  printf '%s\n' "$privkey" > "$tmp"
+  trap 'rm -f "$tmp"' EXIT
+
+  local out
+  if out=$(cleos --url "$ENDPOINT" wallet import --private-key "$(cat "$tmp")" 2>&1); then
+    ok "imported oracle key into keosd"
+  elif echo "$out" | grep -q "Key already in wallet"; then
+    ok "oracle key already imported (cleos confirmed)"
+  else
+    rm -f "$tmp"
+    fail "cleos wallet import failed: $out"
+  fi
+
+  rm -f "$tmp"
+  trap - EXIT
 }
 
 #─────────────────────────────────────────────────────────────────────────────
@@ -535,7 +622,8 @@ main() {
   verify_endpoint
   collect_inputs
   for p in "${PAIRS_ARR[@]}"; do select_feeds_for_pair "$p"; done
-  chain_check
+  chain_check        # hard-fails if linkauth is missing
+  import_oracle_key  # ensures the daemon can sign before we install anything
   build_daemon
   write_config
   install_systemd
