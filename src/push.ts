@@ -1,24 +1,24 @@
 /**
  * On-chain push via the native `cleos` CLI.
  *
- * `cleos` ships with nodeos, accepts `--url` to point at any endpoint, and
- * uses keosd for signing — exactly the pattern most XPR Network BPs already
- * run for `claimrewards` and similar scheduled actions.
+ * Architectural notes:
  *
- * The daemon doesn't hold private keys directly: keys live in the keosd
- * wallet on the host. Optionally the daemon will unlock the wallet on each
- * tick (mirroring the typical claimrewards cron); leave `walletPasswordFile`
- * unset if you keep keosd unlocked some other way (long --unlock-timeout,
- * separate cron, etc.).
+ * - **Wallet password is delivered via stdin, never argv.** Passing `--password`
+ *   on the cleos command line would put the keosd password in `/proc/<pid>/cmdline`,
+ *   which any process with the same UID (and root, and many monitoring agents)
+ *   can read. We pipe it through stdin instead — invisible to `ps -ef`.
+ *
+ * - **The active cleos child is tracked module-level** so a SIGINT/SIGTERM in
+ *   the daemon can kill an in-flight push instead of waiting up to 30s.
+ *
+ * - **Errors are classified** (see `./backoff.ts`) so we don't hammer the chain
+ *   with `missing authority` failures every tick when the BP isn't whitelisted yet.
  */
 
-import { execFile } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
-import { promisify } from "node:util";
 import type { Config, PairConfig } from "./types.js";
 import { log } from "./log.js";
-
-const execFileP = promisify(execFile);
 
 export interface Quote {
   /** Integer-scaled price = round(price * 10^quotedPrecision). */
@@ -27,10 +27,50 @@ export interface Quote {
   pair: string;
 }
 
+const DEFAULT_UNLOCK_TIMEOUT_MS = 10_000;
+const DEFAULT_PUSH_TIMEOUT_MS = 30_000;
+
+// keosd error 3120007 = "Already unlocked" (per nodeos/keosd source). We match
+// on the numeric code instead of the English message so locale changes or minor
+// rewordings don't break the happy path.
+const ALREADY_UNLOCKED_RE = /3120007|already unlocked/i;
+
+let _activeChild: ChildProcess | null = null;
+
+/** Kill any in-flight cleos child. Called from the daemon's signal handler. */
+export function killActiveChild(): void {
+  if (!_activeChild) return;
+  try {
+    _activeChild.kill("SIGTERM");
+  } catch {
+    /* already exited */
+  }
+  // Give it a beat, then escalate.
+  setTimeout(() => {
+    if (_activeChild && !_activeChild.killed) {
+      try {
+        _activeChild.kill("SIGKILL");
+      } catch {
+        /* race with natural exit */
+      }
+    }
+  }, 2_000);
+}
+
 export function scalePrice(price: number, quotedPrecision: number): number {
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error(`scalePrice: bad input price=${price}`);
+  }
+  if (!Number.isInteger(quotedPrecision) || quotedPrecision < 0 || quotedPrecision > 15) {
+    // 10^15 ≈ Number.MAX_SAFE_INTEGER; beyond that f64 loses 1-unit resolution.
+    throw new Error(
+      `scalePrice: quotedPrecision must be 0..15 (got ${quotedPrecision}); ` +
+        `for higher precision switch the daemon to BigInt encoding`,
+    );
+  }
   const scaled = Math.round(price * Math.pow(10, quotedPrecision));
   if (!Number.isSafeInteger(scaled) || scaled <= 0) {
-    throw new Error(`invalid scaled value ${scaled} for price ${price}`);
+    throw new Error(`scalePrice: invalid scaled value ${scaled} for price ${price}`);
   }
   return scaled;
 }
@@ -39,11 +79,7 @@ export function buildQuote(pair: PairConfig, price: number): Quote {
   return { value: scalePrice(price, pair.quotedPrecision), pair: pair.name };
 }
 
-/**
- * Read the wallet password from a chmod-600 file or the env var fallback.
- * Returns null if neither is configured — the caller should then assume
- * the wallet is kept unlocked externally.
- */
+/** Read the wallet password from a chmod-600 file, or null. */
 function getWalletPassword(cfg: Config): string | null {
   if (cfg.walletPasswordFile) {
     let mode: number;
@@ -67,22 +103,84 @@ function getWalletPassword(cfg: Config): string | null {
   return process.env.XPR_ORACLE_WALLET_PW?.trim() || null;
 }
 
+interface RunResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Spawn `cleos` with optional stdin payload. Tracks the child globally so
+ * `killActiveChild()` can interrupt it. Returns once the process exits.
+ */
+function runCleos(args: string[], stdin: string | null, timeoutMs: number): Promise<RunResult> {
+  return new Promise((resolve, reject) => {
+    let child: ChildProcess;
+    try {
+      child = spawn("cleos", args, { stdio: ["pipe", "pipe", "pipe"] });
+    } catch (e) {
+      return reject(e);
+    }
+    _activeChild = child;
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (d) => (stdout += d.toString()));
+    child.stderr?.on("data", (d) => (stderr += d.toString()));
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already exited */
+      }
+      reject(new Error(`cleos timed out after ${timeoutMs}ms: ${args.slice(0, 4).join(" ")}`));
+    }, timeoutMs);
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      _activeChild = null;
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === "ENOENT") {
+        return reject(
+          new Error(
+            "cleos not found in PATH. Install the nodeos toolchain " +
+              "(https://github.com/XPRNetwork/xpr.start ships it) or set " +
+              "Environment=PATH=/usr/local/bin:/usr/bin:/bin in the systemd unit.",
+          ),
+        );
+      }
+      reject(err);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      _activeChild = null;
+      resolve({ code, stdout, stderr });
+    });
+
+    if (stdin !== null) {
+      child.stdin?.write(stdin);
+    }
+    child.stdin?.end();
+  });
+}
+
 async function unlockWallet(cfg: Config, password: string): Promise<void> {
-  const args = ["--url", cfg.endpoint, "wallet", "unlock", "--password", password];
-  if (cfg.walletName) args.splice(2, 0, "--name", cfg.walletName);
-  try {
-    await execFileP("cleos", args, { timeout: 10_000 });
-  } catch (e) {
-    // "Already unlocked" is the happy path on subsequent ticks; everything
-    // else is a real failure.
-    const msg = (e as Error).message;
-    if (!/already unlocked/i.test(msg)) throw e;
-  }
+  const args = ["--url", cfg.endpoint, "wallet", "unlock"];
+  if (cfg.walletName) args.push("--name", cfg.walletName);
+  // Password on stdin — never argv.
+  const r = await runCleos(args, password + "\n", DEFAULT_UNLOCK_TIMEOUT_MS);
+  if (r.code === 0) return;
+  if (ALREADY_UNLOCKED_RE.test(r.stderr) || ALREADY_UNLOCKED_RE.test(r.stdout)) return;
+  throw new Error(
+    `cleos wallet unlock exited ${r.code}: ${(r.stderr || r.stdout).trim() || "no output"}`,
+  );
 }
 
 /**
  * Submit `delphioracle::write` via cleos.
- * Returns the cleos stdout (transaction id summary line) on success.
+ * Returns the cleos stdout transaction-summary line on success.
  */
 export async function pushQuotes(cfg: Config, quotes: Quote[]): Promise<string> {
   if (quotes.length === 0) throw new Error("no quotes to push");
@@ -105,13 +203,13 @@ export async function pushQuotes(cfg: Config, quotes: Quote[]): Promise<string> 
     `exec: cleos --url ${cfg.endpoint} push action ${cfg.contract} write ${data} -p ${auth}`,
   );
 
-  const { stdout, stderr } = await execFileP("cleos", args, {
-    timeout: 30_000,
-    maxBuffer: 4 * 1024 * 1024,
-  });
-
-  // cleos prints the executed transaction summary to stdout on success and
-  // the assertion / auth error to stderr on failure. Surface either.
-  if (!stdout && stderr) throw new Error(stderr.trim());
-  return (stdout || stderr).trim();
+  const r = await runCleos(args, null, DEFAULT_PUSH_TIMEOUT_MS);
+  if (r.code === 0) {
+    return (r.stdout || r.stderr).trim().split("\n")[0];
+  }
+  // Surface stderr (which contains the chain assertion message) so the backoff
+  // classifier can pattern-match it.
+  throw new Error(
+    `cleos push action exited ${r.code}: ${(r.stderr || r.stdout).trim() || "no output"}`,
+  );
 }
